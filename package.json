@@ -1,6 +1,7 @@
 {
   "name": "WatchParty",
   "private": true,
+  "packageManager": "pnpm@10.15.1",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
