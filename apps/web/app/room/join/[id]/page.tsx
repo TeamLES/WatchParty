@@ -1,34 +1,90 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LockIcon, MonitorPlayIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+interface RoomDetail {
+  roomId: string;
+  isPrivate: boolean;
+}
+
 export default function JoinRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
   const router = useRouter();
 
+  const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
-  const isPrivateMock = roomId.includes("private");
+  useEffect(() => {
+    async function fetchRoom() {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}`);
+        if (!res.ok) {
+          throw new Error("Pravdepodobne neexistuje");
+        }
+        const data = await res.json();
+        setRoom(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchRoom();
+  }, [roomId]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsJoining(true);
 
     try {
-      await new Promise(res => setTimeout(res, 800)); // simulate API call
+      const payload: Record<string, string> = {};
+      if (room?.isPrivate && password) {
+        payload.password = password;
+      }
+
+      const res = await fetch(`/api/rooms/${roomId}/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Nepodarilo sa pripojiť");
+      }
+
       router.replace(`/room/${roomId}`);
     } catch {
       alert("Failed to join the room (Incorrect password?).");
       setIsJoining(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <p className="animate-pulse">Checking access...</p>
+      </div>
+    );
+  }
+
+  if (!room) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
+        <p>Room not found.</p>
+        <Button asChild><button type="button" onClick={() => router.push("/hub")}>Back to Hub</button></Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex items-center justify-center font-sans text-foreground">
@@ -45,7 +101,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
         </div>
 
         <form onSubmit={handleJoin} className="space-y-5 pt-4">
-          {isPrivateMock && (
+          {room.isPrivate && (
             <div className="space-y-2 text-left">
               <label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 <LockIcon className="size-4 text-red-500" /> Room is private

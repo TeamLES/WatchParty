@@ -10,10 +10,13 @@ import {
   SendIcon,
   SettingsIcon,
   Share2Icon,
+  TrashIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 
 // Server Room Detail Type
 interface RoomDetail {
@@ -59,8 +62,14 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [messages, setMessages] = useState(INITAL_MESSAGES);
   const [newMessage, setNewMessage] = useState("");
   const [flyingEmojis, setFlyingEmojis] = useState<{ id: number; emoji: string; left: number; rotation: number }[]>([]);
+  const [isUpdatingVideo, setIsUpdatingVideo] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState("");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Fetch actual room data
   useEffect(() => {
@@ -98,21 +107,38 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     fetchRoom();
   }, [roomId]);
 
-  const handlePlay = () => {
-    const canControlVideo = room
-      ? (typeof room.isHost === "boolean" ? room.isHost : true)
-      : false;
-
-    if (!canControlVideo) {
+  const handlePlay = async () => {
+    if (!room?.isHost) {
       alert("Only the host can change the video!");
       return;
     }
 
     const id = extractYoutubeId(videoUrl);
-    if (id) {
-      setActiveVideoId(id);
-    } else {
+    if (!id) {
       alert("Please enter a valid YouTube URL.");
+      return;
+    }
+
+    setIsUpdatingVideo(true);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Nepodarilo sa updatnúť videoUrl");
+      }
+
+      // Aktulizacia prebehla uspesne
+      setActiveVideoId(id);
+    } catch (err) {
+      console.error(err);
+      alert("Chyba pri zmene videa. Skontroluj konzolu.");
+    } finally {
+      setIsUpdatingVideo(false);
     }
   };
 
@@ -139,6 +165,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
   const handleCopyInvite = async () => {
     const joinUrl = `${window.location.origin}/room/join/${roomId}`;
+    setInviteUrl(joinUrl);
 
     try {
       if (navigator.clipboard?.writeText) {
@@ -155,9 +182,31 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         document.body.removeChild(textarea);
       }
 
-      alert("Invite link copied!");
+      setShowInviteModal(true);
     } catch {
       alert(`Copy failed. Use this link manually: ${joinUrl}`);
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    if (!room?.isHost) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("Nepodarilo sa zmazať roomku.");
+      }
+
+      router.push("/hub");
+    } catch (err) {
+      console.error(err);
+      alert("Chyba pri mazaní miestnosti.");
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -191,72 +240,99 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const canControlVideo = typeof room.isHost === "boolean" ? room.isHost : true;
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.16),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(147,51,234,0.15),transparent_50%)] flex flex-col font-sans text-foreground">
-
-      {/* Room Header */}
-      <header className="glass-card sticky top-16 z-40 flex h-16 shrink-0 items-center justify-between px-6 border-x-0 border-t-0 rounded-none border-white/10 bg-card/40 backdrop-blur-2xl">
-        <div className="flex items-center gap-4">
-          <Link href="/hub" className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
-            <MonitorPlayIcon className="size-5" />
-          </Link>
-          <div>
-            <h1 className="text-sm font-bold leading-tight flex items-center gap-2">
-              {room.title}
-              {room.isHost && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">HOST</span>}
-            </h1>
-            <p className="text-xs text-muted-foreground">{room.membersCount} connected</p>
-            {!canControlVideo ? (
-              <p className="text-[11px] text-muted-foreground/90">View-only mode: only host can control playback.</p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="glass-card border-primary/30 text-primary hover:bg-primary/20 gap-2 h-9"
-            onClick={handleCopyInvite}
-          >
-            <Share2Icon className="size-4" />
-            <span className="hidden sm:inline">Copy Invite</span>
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full glass-card hover:bg-white/10">
-            <SettingsIcon className="size-4" />
-          </Button>
-        </div>
-      </header>
+    <div className="relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.16),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(147,51,234,0.15),transparent_50%)] flex flex-col font-sans text-foreground pt-4">
 
       {/* Main Workspace */}
-      <main className="flex-1 flex flex-col lg:flex-row gap-6 p-4 sm:p-6 overflow-hidden max-h-[calc(100vh-4rem)]">
+      <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 overflow-hidden max-h-[calc(100vh-4rem-1rem)]">
 
-        {/* Video Column */}
+        {/* Video Column (Main Content) */}
         <section className="flex-1 flex flex-col gap-4 min-w-0">
 
-          {/* Video Control Panel */}
-          <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
-            <div className="flex-1 w-full relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
-                <CopyIcon className="size-4" />
+          {/* Integrated Room Info Bar */}
+          <div className="glass-card rounded-2xl p-4 flex flex-col gap-4 shrink-0 shadow-sm border border-white/10 bg-black/20">
+            {/* Top row: Title and Actions */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <Link href="/hub" className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-transform hover:scale-105 shadow-inner">
+                  <MonitorPlayIcon className="size-6" />
+                </Link>
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-extrabold leading-tight flex items-center gap-2 tracking-tight">
+                    {room.title}
+                    {room.isHost && <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">Host</span>}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      {room.membersCount} watching now
+                    </p>
+                    {!canControlVideo && (
+                      <span className="text-[11px] text-muted-foreground/80 bg-white/5 px-1.5 rounded">View-only mode</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <Input
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Paste YouTube link here..."
-                className="pl-10 h-12 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-base"
-                onKeyDown={(e) => e.key === "Enter" && handlePlay()}
-                disabled={!canControlVideo}
-              />
+
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="bg-primary/10 hover:bg-primary/20 text-primary font-semibold gap-2 border border-primary/20 transition-all rounded-xl h-10"
+                  onClick={handleCopyInvite}
+                >
+                  <Share2Icon className="size-4" />
+                  <span className="hidden lg:inline">Invite Friends</span>
+                </Button>
+
+                {room.isHost && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white gap-2 transition-all rounded-xl h-10"
+                    onClick={() => setShowDeleteModal(true)}
+                    disabled={isDeleting}
+                  >
+                    <TrashIcon className="size-4" />
+                    <span className="hidden lg:inline">{isDeleting ? "Deleting..." : "Delete Room"}</span>
+                  </Button>
+                )}
+
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors">
+                  <SettingsIcon className="size-5" />
+                </Button>
+              </div>
             </div>
-            <Button
-              size="lg"
-              className="w-full sm:w-auto h-12 px-8 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2"
-              onClick={handlePlay}
-              disabled={!canControlVideo}
-            >
-              <PlayIcon className="size-5 fill-current" />
-              <span className="font-semibold">Play for Everyone</span>
-            </Button>
+
+            {/* Bottom row: Video Control Panel */}
+            {canControlVideo && (
+              <div className="flex flex-col sm:flex-row gap-3 items-center w-full pt-4 border-t border-white/5">
+                <div className="flex-1 w-full relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
+                    <CopyIcon className="size-4" />
+                  </div>
+                  <Input
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    placeholder="Paste YouTube link here..."
+                    className="pl-10 h-11 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-sm"
+                    onKeyDown={(e) => e.key === "Enter" && !isUpdatingVideo && handlePlay()}
+                    disabled={isUpdatingVideo}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full sm:w-auto h-11 px-6 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2"
+                  onClick={handlePlay}
+                  disabled={isUpdatingVideo || !videoUrl}
+                >
+                  <PlayIcon className="size-4 fill-current" />
+                  <span className="font-semibold">{isUpdatingVideo ? "Mení sa..." : "Play for Everyone"}</span>
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Video Player */}
@@ -299,8 +375,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         </section>
 
         {/* Live Chat Column */}
-        <aside className="w-full lg:w-96 xl:w-[400px] flex flex-col shrink-0 gap-4 h-[500px] lg:h-auto">
-          <div className="glass-card rounded-3xl flex flex-col h-full overflow-hidden border-white/10">
+        <aside className="w-full lg:w-96 xl:w-[400px] flex flex-col shrink-0 gap-4 h-[500px] lg:h-auto pb-2">
+          <div className="glass-card rounded-3xl flex flex-col h-full overflow-hidden border-white/10 shadow-lg">
 
             {/* Chat Header */}
             <div className="p-4 border-b border-white/10 bg-black/10 shrink-0 flex items-center justify-between">
@@ -374,6 +450,52 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         </aside>
 
       </main>
+
+      <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="Invite Link Copied!">
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-primary/20 text-primary flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(232,121,249,0.3)]">
+            <Share2Icon className="size-8" />
+          </div>
+          <p className="text-muted-foreground text-sm">
+            Send this link to your friends so they can join you! The link is already copied to your clipboard.
+          </p>
+          <div className="w-full bg-black/30 border border-white/10 p-3 rounded-xl overflow-hidden mt-2">
+            <p className="text-xs font-mono text-primary truncate select-all">{inviteUrl}</p>
+          </div>
+          <Button onClick={() => setShowInviteModal(false)} className="w-full mt-2 rounded-xl shadow-[0_0_15px_rgba(232,121,249,0.2)]">
+            Got it
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showDeleteModal} onClose={() => !isDeleting && setShowDeleteModal(false)} title="Delete this room?">
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+            <TrashIcon className="size-8" />
+          </div>
+          <p className="text-muted-foreground text-sm">
+            Are you sure you want to end this WatchParty? This action will permanently delete the room history and remove all current viewers.
+          </p>
+          <div className="flex w-full gap-3 mt-4">
+            <Button
+              variant="ghost"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={isDeleting}
+              className="flex-1 rounded-xl hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteRoom}
+              disabled={isDeleting}
+              className="flex-1 rounded-xl bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+            >
+              {isDeleting ? "Deleting..." : "Yes, delete it"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }

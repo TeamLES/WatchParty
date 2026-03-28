@@ -21,7 +21,9 @@ export class InMemoryRoomsRepository implements RoomsRepository {
   }
 
   async createRoom(room: Room): Promise<Room> {
-    this.logger.log(`createRoom roomId=${room.roomId} hostUserId=${room.hostUserId}`);
+    this.logger.log(
+      `createRoom roomId=${room.roomId} hostUserId=${room.hostUserId}`,
+    );
     const existingRoom = this.roomsById.get(room.roomId);
 
     if (existingRoom) {
@@ -41,6 +43,30 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return this.cloneRoom(room);
   }
 
+    async updateRoom(room: Room): Promise<Room> {
+    this.logger.log(`updateRoom roomId=${room.roomId}`);
+    if (!this.roomsById.has(room.roomId)) {
+      throw new Error(`Room with roomId ${room.roomId} does not exist`);
+    }
+
+    this.roomsById.set(room.roomId, this.cloneRoom(room));
+    return this.cloneRoom(room);
+  }
+
+  async deleteRoom(roomId: string): Promise<void> {
+    this.logger.log(`deleteRoom roomId=${roomId}`);
+    this.roomsById.delete(roomId);
+    this.membersByRoomId.delete(roomId);
+    // Cleanup invites code index
+    const roomInvites = this.invitesByRoomId.get(roomId);
+    if (roomInvites) {
+      for (const inviteCode of roomInvites.keys()) {
+        this.invitesByCode.delete(inviteCode);
+      }
+    }
+    this.invitesByRoomId.delete(roomId);
+  }
+
   async listRooms(): Promise<Room[]> {
     this.logger.log('listRooms');
 
@@ -52,12 +78,16 @@ export class InMemoryRoomsRepository implements RoomsRepository {
   async getRoomById(roomId: string): Promise<Room | null> {
     this.logger.log(`getRoomById roomId=${roomId}`);
     const room = this.roomsById.get(roomId);
-    this.logger.log(`getRoomById result roomId=${roomId} found=${Boolean(room)}`);
+    this.logger.log(
+      `getRoomById result roomId=${roomId} found=${Boolean(room)}`,
+    );
     return room ? this.cloneRoom(room) : null;
   }
 
   async addMember(member: RoomMember): Promise<RoomMember> {
-    this.logger.log(`addMember roomId=${member.roomId} userId=${member.userId}`);
+    this.logger.log(
+      `addMember roomId=${member.roomId} userId=${member.userId}`,
+    );
     let roomMembers = this.membersByRoomId.get(member.roomId);
 
     if (!roomMembers) {

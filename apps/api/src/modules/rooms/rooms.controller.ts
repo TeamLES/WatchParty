@@ -4,6 +4,8 @@ import {
   Get,
   Param,
   Post,
+  Patch,
+  Delete,
   UnauthorizedException,
   UseGuards,
   UsePipes,
@@ -27,7 +29,9 @@ import { CognitoAuthGuard } from '../../common/guards/cognito-auth.guard';
 import type { VerifiedCognitoAccessToken } from '../auth/cognito-jwt-verifier.service';
 import { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { JoinRoomDto } from './dto/join-room.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
 import {
   type CreateRoomInviteResponse,
   type CreateRoomResponse,
@@ -105,6 +109,55 @@ export class RoomsController {
     return this.roomsService.createRoom(userId, createRoomDto);
   }
 
+  @Patch(':roomId')
+  @ApiOperation({ summary: 'Update room (host only)' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiBody({ type: UpdateRoomDto })
+  @ApiOkResponse({
+    description: 'Room updated',
+    schema: {
+      example: {
+        roomId: 'a1b2c3d4e5f6a7b8',
+        title: 'Friday Night Cinema Updated',
+        videoUrl: 'https://new-url.com',
+        isPrivate: true,
+        hostUserId: 'cognito-sub',
+        memberCount: 1,
+        status: 'active',
+        createdAt: '2026-03-28T12:00:00.000Z',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid payload or roomId' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({ description: 'Only host can update the room' })
+  @ApiNotFoundResponse({ description: 'Room not found' })
+  async updateRoom(
+    @Param() params: RoomIdParamDto,
+    @Body() updateRoomDto: UpdateRoomDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ) {
+    const userId = this.getRequiredUserSub(user);
+    return this.roomsService.updateRoom(params.roomId, userId, updateRoomDto);
+  }
+
+  @Delete(':roomId')
+  @ApiOperation({ summary: 'Delete room (host only)' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiOkResponse({ description: 'Room deleted successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid roomId' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({ description: 'Only host can delete the room' })
+  @ApiNotFoundResponse({ description: 'Room not found' })
+  async deleteRoom(
+    @Param() params: RoomIdParamDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<{ message: string }> {
+    const userId = this.getRequiredUserSub(user);
+    await this.roomsService.deleteRoom(params.roomId, userId);
+    return { message: 'Room deleted successfully' };
+  }
+
   @Get(':roomId')
   @ApiOperation({ summary: 'Get room metadata and members' })
   @ApiParam({ name: 'roomId', type: String })
@@ -147,6 +200,7 @@ export class RoomsController {
   @Post(':roomId/join')
   @ApiOperation({ summary: 'Join room as viewer (idempotent)' })
   @ApiParam({ name: 'roomId', type: String })
+  @ApiBody({ type: JoinRoomDto, required: false })
   @ApiOkResponse({
     description: 'Joined room or already member',
     schema: {
@@ -164,10 +218,11 @@ export class RoomsController {
   @ApiNotFoundResponse({ description: 'Room not found' })
   async joinRoom(
     @Param() params: RoomIdParamDto,
+    @Body() joinRoomDto: JoinRoomDto,
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<JoinRoomResponse> {
     const userId = this.getRequiredUserSub(user);
-    return this.roomsService.joinRoom(params.roomId, userId);
+    return this.roomsService.joinRoom(params.roomId, userId, joinRoomDto);
   }
 
   @Post(':roomId/invites')
@@ -238,7 +293,9 @@ export class RoomsController {
 
   private getRequiredUserSub(user: VerifiedCognitoAccessToken | null): string {
     if (!user?.sub) {
-      throw new UnauthorizedException('Authenticated user is missing sub claim');
+      throw new UnauthorizedException(
+        'Authenticated user is missing sub claim',
+      );
     }
 
     return user.sub;

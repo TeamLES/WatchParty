@@ -66,7 +66,8 @@ export class CreateRoomDto {
     description: 'Required when isPrivate is true.',
   })
   @ValidateIf(
-    (dto: CreateRoomDto) => dto.isPrivate === true || dto.password !== undefined,
+    (dto: CreateRoomDto) =>
+      dto.isPrivate === true || dto.password !== undefined,
   )
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

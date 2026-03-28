@@ -11,6 +11,8 @@ import { randomBytes } from 'crypto';
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
 import { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { JoinRoomDto } from './dto/join-room.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
 import type { RoomInvite } from './entities/room-invite.entity';
 import type { RoomMember, RoomMemberRole } from './entities/room-member.entity';
 import type { Room } from './entities/room.entity';
@@ -92,7 +94,9 @@ export class RoomsService {
     const password = createRoomDto.password;
 
     if (isPrivate && !password) {
-      throw new BadRequestException('password is required when isPrivate is true');
+      throw new BadRequestException(
+        'password is required when isPrivate is true',
+      );
     }
 
     if (!isPrivate && password) {
@@ -125,7 +129,9 @@ export class RoomsService {
         await this.roomsRepository.createRoom(room);
         await this.roomsRepository.addMember(hostMember);
 
-        this.logger.log(`createRoom success roomId=${room.roomId} host=${userId}`);
+        this.logger.log(
+          `createRoom success roomId=${room.roomId} host=${userId}`,
+        );
 
         return this.toRoomSummaryResponse(room, 1);
       } catch (error) {
@@ -143,13 +149,78 @@ export class RoomsService {
     throw new Error('Failed to allocate a unique roomId');
   }
 
+  async updateRoom(
+    roomId: string,
+    userId: string,
+    updateRoomDto: UpdateRoomDto,
+  ): Promise<GetRoomResponse> {
+    this.logger.log(`updateRoom roomId=${roomId} userId=${userId}`);
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.hostUserId !== userId) {
+      throw new ForbiddenException('Only the host can update the room');
+    }
+
+    const isPrivate = updateRoomDto.isPrivate ?? room.isPrivate;
+    const password = updateRoomDto.password ?? room.password;
+
+    if (isPrivate && !password) {
+      throw new BadRequestException(
+        'password is required when isPrivate is true',
+      );
+    }
+
+    if (!isPrivate && password) {
+      throw new BadRequestException(
+        'password can be provided only when isPrivate is true',
+      );
+    }
+
+    const updatedRoom: Room = {
+      ...room,
+      ...(updateRoomDto.title !== undefined
+        ? { title: updateRoomDto.title }
+        : {}),
+      ...(updateRoomDto.videoUrl !== undefined
+        ? { videoUrl: updateRoomDto.videoUrl }
+        : {}),
+      isPrivate,
+      ...(password !== undefined ? { password } : {}),
+    };
+
+    if (!isPrivate) {
+      delete updatedRoom.password;
+    }
+
+    // In order for videoUrl to be updated to null/undefined we must allow clearing it.
+    // updateRoomDto doesn't permit null right now based on CreateRoomDto, but we map undefined.
+
+    await this.roomsRepository.updateRoom(updatedRoom);
+
+    return this.getRoom(roomId, userId);
+  }
+
+  async deleteRoom(roomId: string, userId: string): Promise<void> {
+    this.logger.log(`deleteRoom roomId=${roomId} userId=${userId}`);
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.hostUserId !== userId) {
+      throw new ForbiddenException('Only the host can delete the room');
+    }
+
+    await this.roomsRepository.deleteRoom(roomId);
+    this.logger.log(`deleteRoom success roomId=${roomId} userId=${userId}`);
+  }
+
   async getRooms(): Promise<GetRoomsResponse> {
     this.logger.log('getRooms');
     const rooms = await this.roomsRepository.listRooms();
 
     const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
-        const memberCount = await this.roomsRepository.countMembers(room.roomId);
+        const memberCount = await this.roomsRepository.countMembers(
+          room.roomId,
+        );
         return this.toRoomSummaryResponse(room, memberCount);
       }),
     );
@@ -173,13 +244,19 @@ export class RoomsService {
     };
   }
 
-  async joinRoom(roomId: string, userId: string): Promise<JoinRoomResponse> {
+  async joinRoom(
+    roomId: string,
+    userId: string,
+    joinRoomDto: JoinRoomDto,
+  ): Promise<JoinRoomResponse> {
     this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
     const existingMember = await this.roomsRepository.getMember(roomId, userId);
 
     if (existingMember) {
-      this.logger.log(`joinRoom alreadyMember roomId=${roomId} userId=${userId}`);
+      this.logger.log(
+        `joinRoom alreadyMember roomId=${roomId} userId=${userId}`,
+      );
       return {
         roomId,
         userId: existingMember.userId,
@@ -187,6 +264,12 @@ export class RoomsService {
         joinedAt: existingMember.joinedAt,
         alreadyMember: true,
       };
+    }
+
+    if (room.isPrivate && room.hostUserId !== userId) {
+      if (room.password !== joinRoomDto?.password) {
+        throw new ForbiddenException('Invalid password for private room');
+      }
     }
 
     const member: RoomMember = {

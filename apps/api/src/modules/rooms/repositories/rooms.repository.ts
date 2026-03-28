@@ -10,6 +10,8 @@ export class RoomAlreadyExistsError extends Error {
 
 export interface RoomsRepository {
   createRoom(room: Room): Promise<Room>;
+  updateRoom(room: Room): Promise<Room>;
+  deleteRoom(roomId: string): Promise<void>;
   listRooms(): Promise<Room[]>;
 
   // Room lookup must be scoped only by roomId, never by current user.

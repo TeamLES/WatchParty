@@ -15,6 +15,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+const extractYoutubeId = (url: string | null) => {
+  if (!url) return null;
+  const regExp =
+    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return match && match[2].length === 11 ? match[2] : null;
+};
+
 interface Room {
   roomId: string;
   title: string;
@@ -201,19 +209,35 @@ export default function HubPage() {
               <Card key={room.roomId} className={`glass-card border-white/10 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl`} onClick={() => router.push(`/room/join/${room.roomId}`)}>
 
                 {/* Visual Header */}
-                <div className="h-28 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/30 via-background to-background relative border-b border-white/5">
-                  <div className="absolute top-4 right-4">
+                <div
+                  className="h-28 relative border-b border-white/5 bg-cover bg-center"
+                  style={{
+                    backgroundImage: extractYoutubeId(room.videoUrl)
+                      ? `url(https://img.youtube.com/vi/${extractYoutubeId(room.videoUrl)}/hqdefault.jpg)`
+                      : 'none',
+                  }}
+                >
+                  {/* Backdrop overlay for readability if map has video */}
+                  {extractYoutubeId(room.videoUrl) && (
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-all" />
+                  )}
+
+                  {!extractYoutubeId(room.videoUrl) && (
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
+                  )}
+
+                  <div className="absolute top-4 right-4 z-10">
                     {room.isPrivate ? (
-                      <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-950/40 backdrop-blur-md gap-1">
-                        <LockIcon className="size-3" /> Private
+                      <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-950/40 backdrop-blur-md gap-1 shadow-sm">
+                        <LockIcon className="size-3"/> Private
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-950/40 backdrop-blur-md gap-1">
-                        <GlobeIcon className="size-3" /> Public
+                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-950/40 backdrop-blur-md gap-1 shadow-sm">
+                        <GlobeIcon className="size-3"/> Public
                       </Badge>
                     )}
                   </div>
-                  <div className="absolute -bottom-5 left-5 w-12 h-12 rounded-2xl bg-card border border-white/10 shadow-lg flex items-center justify-center text-primary">
+                  <div className="absolute -bottom-5 left-5 w-12 h-12 rounded-2xl bg-card border border-white/10 shadow-lg flex items-center justify-center text-primary z-10">
                     <MonitorPlayIcon className="size-5" />
                   </div>
                 </div>
