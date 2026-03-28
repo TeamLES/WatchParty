@@ -37,14 +37,14 @@ const floatingTiles = [
     detail: "0.2s drift",
     icon: MonitorPlayIcon,
     className:
-      "left-[10%] bottom-[20%] sm:left-[20%] sm:bottom-[15%] lg:left-[25%] lg:bottom-[20%] animate-[float_6.5s_ease-in-out_infinite_0.25s] rotate-[2deg]",
+      "left-[10%] top-[40%] sm:left-[8%] sm:top-[50%] lg:left-[12%] lg:top-[60%] animate-[float_6.5s_ease-in-out_infinite_0.25s] rotate-[2deg]",
   },
   {
     title: "Secure",
     detail: "Private room",
     icon: ShieldCheckIcon,
     className:
-      "right-[10%] bottom-[25%] sm:right-[15%] sm:bottom-[20%] lg:right-[20%] lg:bottom-[25%] animate-[float_8s_ease-in-out_infinite_0.6s] rotate-[-3deg]",
+      "right-[10%] top-[45%] sm:right-[15%] sm:top-[55%] lg:right-[18%] lg:top-[65%] animate-[float_8s_ease-in-out_infinite_0.6s] rotate-[-3deg]",
   },
 ];
 
