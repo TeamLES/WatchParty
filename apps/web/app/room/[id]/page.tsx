@@ -22,7 +22,7 @@ interface RoomDetail {
   url: string;
   membersCount: number;
   hostId: string;
-  isHost: boolean;
+  isHost?: boolean;
 }
 
 // YouTube ID Extractor
@@ -81,7 +81,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           url: data.videoUrl || "",
           membersCount: data.memberCount,
           hostId: data.hostUserId,
-          isHost: data.isHost,
+          isHost: typeof data.isHost === "boolean" ? data.isHost : undefined,
         });
 
         if (data.videoUrl) {
@@ -99,7 +99,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   }, [roomId]);
 
   const handlePlay = () => {
-    if (!room?.isHost) {
+    const canControlVideo = room
+      ? (typeof room.isHost === "boolean" ? room.isHost : true)
+      : false;
+
+    if (!canControlVideo) {
       alert("Only the host can change the video!");
       return;
     }
@@ -133,6 +137,30 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleCopyInvite = async () => {
+    const joinUrl = `${window.location.origin}/room/join/${roomId}`;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(joinUrl);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = joinUrl;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
+      alert("Invite link copied!");
+    } catch {
+      alert(`Copy failed. Use this link manually: ${joinUrl}`);
+    }
+  };
+
   const handleReaction = (emoji: string) => {
     const { id, left, rotation } = generateReactionContext();
     setFlyingEmojis((prev) => [...prev, { id, emoji, left, rotation }]);
@@ -159,6 +187,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     );
   }
 
+  // If API does not send isHost yet, keep controls available instead of hiding the input.
+  const canControlVideo = typeof room.isHost === "boolean" ? room.isHost : true;
+
   return (
     <div className="relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.16),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(147,51,234,0.15),transparent_50%)] flex flex-col font-sans text-foreground">
 
@@ -174,6 +205,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
               {room.isHost && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">HOST</span>}
             </h1>
             <p className="text-xs text-muted-foreground">{room.membersCount} connected</p>
+            {!canControlVideo ? (
+              <p className="text-[11px] text-muted-foreground/90">View-only mode: only host can control playback.</p>
+            ) : null}
           </div>
         </div>
 
@@ -182,11 +216,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             variant="outline"
             size="sm"
             className="glass-card border-primary/30 text-primary hover:bg-primary/20 gap-2 h-9"
-            onClick={() => {
-              const joinUrl = `${window.location.origin}/room/join/${room.id}`;
-              navigator.clipboard.writeText(joinUrl);
-              alert("Invite link copied!");
-            }}
+            onClick={handleCopyInvite}
           >
             <Share2Icon className="size-4" />
             <span className="hidden sm:inline">Copy Invite</span>
@@ -203,27 +233,31 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         {/* Video Column */}
         <section className="flex-1 flex flex-col gap-4 min-w-0">
 
-          {/* Host Panel */}
-          {room.isHost && (
-            <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
-              <div className="flex-1 w-full relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
-                  <CopyIcon className="size-4" />
-                </div>
-                <Input
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="Paste YouTube link here..."
-                  className="pl-10 h-12 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-base"
-                  onKeyDown={(e) => e.key === "Enter" && handlePlay()}
-                />
+          {/* Video Control Panel */}
+          <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
+            <div className="flex-1 w-full relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
+                <CopyIcon className="size-4" />
               </div>
-              <Button size="lg" className="w-full sm:w-auto h-12 px-8 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2" onClick={handlePlay}>
-                <PlayIcon className="size-5 fill-current" />
-                <span className="font-semibold">Play for Everyone</span>
-              </Button>
+              <Input
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                placeholder="Paste YouTube link here..."
+                className="pl-10 h-12 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-base"
+                onKeyDown={(e) => e.key === "Enter" && handlePlay()}
+                disabled={!canControlVideo}
+              />
             </div>
-          )}
+            <Button
+              size="lg"
+              className="w-full sm:w-auto h-12 px-8 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2"
+              onClick={handlePlay}
+              disabled={!canControlVideo}
+            >
+              <PlayIcon className="size-5 fill-current" />
+              <span className="font-semibold">Play for Everyone</span>
+            </Button>
+          </div>
 
           {/* Video Player */}
           <div className="glass-card rounded-3xl flex-1 relative overflow-hidden bg-black/60 shadow-2xl min-h-[300px]">
