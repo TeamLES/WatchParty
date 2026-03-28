@@ -67,9 +67,6 @@ const features = [
 ];
 
 export default async function Home() {
-  const apiBaseUrl = (
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001"
-  ).replace(/\/+$/g, "");
   const accessToken = await getAccessTokenFromCookies();
   const isAuthenticated = Boolean(accessToken);
   const currentUser = isAuthenticated ? await getCurrentUserFromApi() : null;
@@ -151,7 +148,7 @@ export default async function Home() {
             </Button>
           )}
           <Button asChild size="lg" variant="secondary" className="h-14 px-8 text-lg rounded-full glass-card hover:bg-white/10 transition-all">
-            <a href={`${apiBaseUrl}/api/auth/me`} className="gap-2">
+            <a href="/api/me" className="gap-2">
               <UserRoundIcon className="size-5" />
               API status
             </a>

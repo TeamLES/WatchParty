@@ -9,11 +9,11 @@ import { AuthModule } from './modules/auth/auth.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env', 'apps/api/.env.local', 'apps/api/.env'],
+      envFilePath: ['.env.local'],
     }),
     AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

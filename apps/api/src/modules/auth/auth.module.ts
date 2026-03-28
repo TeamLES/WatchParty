@@ -11,4 +11,4 @@ import { CognitoJwtVerifierService } from './cognito-jwt-verifier.service';
   providers: [CognitoJwtVerifierService, CognitoAuthGuard],
   exports: [CognitoJwtVerifierService],
 })
-export class AuthModule {}
+export class AuthModule { }

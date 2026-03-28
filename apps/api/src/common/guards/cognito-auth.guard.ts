@@ -17,7 +17,7 @@ export type AuthenticatedRequest = Request & {
 
 @Injectable()
 export class CognitoAuthGuard implements CanActivate {
-  constructor(private readonly verifierService: CognitoJwtVerifierService) {}
+  constructor(private readonly verifierService: CognitoJwtVerifierService) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -30,7 +30,9 @@ export class CognitoAuthGuard implements CanActivate {
     const [scheme, token] = authHeader.split(' ');
 
     if (scheme !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Authorization header must use Bearer token');
+      throw new UnauthorizedException(
+        'Authorization header must use Bearer token',
+      );
     }
 
     request.user = await this.verifierService.verifyAccessToken(token);
