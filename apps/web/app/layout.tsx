@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WatchParty",
+  title: "WatchParty • Real-time cinema",
   description: "WatchParty web application",
 };
 
