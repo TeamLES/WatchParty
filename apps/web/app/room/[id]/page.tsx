@@ -62,21 +62,33 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Simulate room fetching
+  // Fetch actual room data
   useEffect(() => {
     async function fetchRoom() {
       try {
-        await new Promise(res => setTimeout(res, 500));
+        const res = await fetch(`/api/rooms/${roomId}`);
+        if (!res.ok) {
+          throw new Error("Failed to fetch room");
+        }
+        const data = await res.json();
+
+        console.log("Room INFO (vrátené z API):", data);
+        console.log("Video URL tejto roomky:", data.videoUrl);
 
         setRoom({
-          id: roomId,
-          title: roomId.includes("real") ? "Chill Beats & Study" : "My WatchParty Session",
-          url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
-          membersCount: Math.floor(Math.random() * 10) + 1,
-          hostId: "user-123",
-          isHost: true,
+          id: data.roomId,
+          title: data.title,
+          url: data.videoUrl || "",
+          membersCount: data.memberCount,
+          hostId: data.hostUserId,
+          isHost: data.isHost,
         });
-        setActiveVideoId(extractYoutubeId("https://www.youtube.com/watch?v=aqz-KE-bpKQ"));
+
+        if (data.videoUrl) {
+          setVideoUrl(data.videoUrl);
+          setActiveVideoId(extractYoutubeId(data.videoUrl));
+        }
+
       } catch (err) {
         console.error(err);
       } finally {
