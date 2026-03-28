@@ -47,7 +47,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const tokens = await exchangeCodeForTokens(code, pendingAuthCookies.codeVerifier);
 
-    const response = NextResponse.redirect(new URL("/", request.url));
+    const response = NextResponse.redirect(new URL("/room", request.url));
     clearPendingAuthCookies(response);
     setSessionTokenCookies(response, {
       accessToken: tokens.access_token,
@@ -57,7 +57,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Cognito token exchange failed:", error);
     return redirectToLoginWithError(request, "token_exchange_failed");
   }
 }

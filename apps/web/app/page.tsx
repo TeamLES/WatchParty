@@ -120,19 +120,33 @@ export default async function Home() {
           The ultimate synchronized viewing experience. Share a link, press play, and enjoy perfect sync with live chat.
         </p>
 
+        <p className="text-sm font-medium text-muted-foreground">
+          {isAuthenticated
+            ? "Session active. Jump into your room or safely log out."
+            : "Sign in to create or join a synchronized room."}
+        </p>
+
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           {isAuthenticated ? (
-            <Button asChild size="lg" className="h-14 px-8 text-lg rounded-full shadow-[0_0_30px_rgba(232,121,249,0.3)] hover:shadow-[0_0_40px_rgba(232,121,249,0.5)] transition-all">
-              <Link href="/logout" className="gap-2">
-                <LogOutIcon className="size-5" />
-                Logout
-              </Link>
-            </Button>
+            <>
+              <Button asChild size="lg" className="h-14 px-8 text-lg rounded-full shadow-[0_0_30px_rgba(232,121,249,0.3)] hover:shadow-[0_0_40px_rgba(232,121,249,0.5)] transition-all">
+                <Link href="/room" className="gap-2">
+                  <MonitorPlayIcon className="size-5" />
+                  Go to room
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="destructive" className="h-14 px-8 text-lg rounded-full transition-all">
+                <Link href="/logout" className="gap-2">
+                  <LogOutIcon className="size-5" />
+                  Logout
+                </Link>
+              </Button>
+            </>
           ) : (
             <Button asChild size="lg" className="h-14 px-8 text-lg rounded-full shadow-[0_0_30px_rgba(232,121,249,0.3)] hover:shadow-[0_0_40px_rgba(232,121,249,0.5)] transition-all">
               <Link href="/auth/login" className="gap-2">
                 <MonitorPlayIcon className="size-5" />
-                Start watching
+                Login
               </Link>
             </Button>
           )}
