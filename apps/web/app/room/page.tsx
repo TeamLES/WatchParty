@@ -30,11 +30,18 @@ const INITAL_MESSAGES = [
   { id: 3, user: "Nina", text: "Čakám, pusti to 🍿", time: "20:42", isMe: false },
 ];
 
+const generateReactionContext = () => ({
+  id: Date.now() + Math.random(),
+  left: 10 + Math.random() * 80,
+  rotation: Math.floor(Math.random() * 60) - 30, // -30 až +30 stupňov natočenie
+});
+
 export default function RoomPage() {
   const [videoUrl, setVideoUrl] = useState("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
   const [activeVideoId, setActiveVideoId] = useState<string | null>("aqz-KE-bpKQ");
   const [messages, setMessages] = useState(INITAL_MESSAGES);
   const [newMessage, setNewMessage] = useState("");
+  const [flyingEmojis, setFlyingEmojis] = useState<{ id: number; emoji: string; left: number; rotation: number }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +75,16 @@ export default function RoomPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleReaction = (emoji: string) => {
+    const { id, left, rotation } = generateReactionContext();
+    setFlyingEmojis((prev) => [...prev, { id, emoji, left, rotation }]);
+
+    // Emoji odstránime z listu po skončení animácie
+    setTimeout(() => {
+      setFlyingEmojis((prev) => prev.filter((e) => e.id !== id));
+    }, 2500);
+  };
 
   return (
     <div className="relative min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex flex-col font-sans text-foreground">
@@ -123,6 +140,24 @@ export default function RoomPage() {
 
           {/* Samotný Video Prehrávač (16:9 kontajner) */}
           <div className="glass-card rounded-3xl flex-1 relative overflow-hidden bg-black/60 shadow-2xl min-h-[300px]">
+            {/* Vykreslenie plávajúcich emoji reakcií nad videom */}
+            <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+              {flyingEmojis.map(({ id, emoji, left, rotation }) => (
+                <div
+                  key={id}
+                  className="absolute bottom-0 text-5xl animate-[flyUp_2.5s_ease-out_forwards]"
+                  style={{
+                    left: `${left}%`,
+                    transform: `rotate(${rotation}deg)`
+                  }}
+                >
+                  <div style={{ transform: `rotate(${rotation}deg)` }}>
+                    {emoji}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {activeVideoId ? (
               <iframe
                 className="absolute inset-0 w-full h-full"
@@ -177,8 +212,24 @@ export default function RoomPage() {
               <div ref={chatEndRef} />
             </div>
 
+            {/* Quick Chat Reakcie - Buttons */}
+            <div className="px-4 py-2 shrink-0 bg-black/10 border-t border-white/5 flex items-center gap-2 overflow-x-auto">
+              {['😀', '😢', '😡', '❤️'].map((emoji) => (
+                <Button
+                  key={emoji}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleReaction(emoji)}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-lg transition-transform hover:scale-110"
+                >
+                  {emoji}
+                </Button>
+              ))}
+            </div>
+
             {/* Chat Vstup */}
-            <div className="p-4 pt-2 shrink-0 bg-black/10 border-t border-white/5">
+            <div className="p-4 pt-2 shrink-0 bg-black/10">
               <form onSubmit={handleSendMessage} className="relative flex items-center">
                 <Input
                   value={newMessage}
