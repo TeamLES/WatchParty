@@ -47,7 +47,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const tokens = await exchangeCodeForTokens(code, pendingAuthCookies.codeVerifier);
 
-    const response = NextResponse.redirect(new URL("/room", request.url));
+    const response = NextResponse.redirect(new URL("/hub", request.url));
     clearPendingAuthCookies(response);
     setSessionTokenCookies(response, {
       accessToken: tokens.access_token,

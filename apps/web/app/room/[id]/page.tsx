@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { use, useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import {
   CopyIcon,
   MessageSquareTextIcon,
@@ -14,7 +15,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-// Pomocná funkcia na získanie YouTube ID z URL
+// Server Room Detail Type
+interface RoomDetail {
+  id: string;
+  title: string;
+  url: string;
+  membersCount: number;
+  hostId: string;
+  isHost: boolean;
+}
+
+// YouTube ID Extractor
 const extractYoutubeId = (url: string) => {
   if (!url) return null;
   const regExp =
@@ -23,34 +34,69 @@ const extractYoutubeId = (url: string) => {
   return match && match[2].length === 11 ? match[2] : null;
 };
 
-// Hardcoded ukážkové správy
+// Hardcoded mock messages
 const INITAL_MESSAGES = [
-  { id: 1, user: "Ty", text: "Caute, všetci tu?", time: "20:41", isMe: true },
-  { id: 2, user: "Alex", text: "Jasne, možeme začať", time: "20:42", isMe: false },
-  { id: 3, user: "Nina", text: "Čakám, pusti to 🍿", time: "20:42", isMe: false },
+  { id: 1, user: "You", text: "Hey, is everyone here?", time: "20:41", isMe: true },
+  { id: 2, user: "Alex", text: "Yeah, ready to start", time: "20:42", isMe: false },
+  { id: 3, user: "Nina", text: "Waiting, play it 🍿", time: "20:42", isMe: false },
 ];
 
 const generateReactionContext = () => ({
   id: Date.now() + Math.random(),
   left: 10 + Math.random() * 80,
-  rotation: Math.floor(Math.random() * 60) - 30, // -30 až +30 stupňov natočenie
+  rotation: Math.floor(Math.random() * 60) - 30,
 });
 
-export default function RoomPage() {
+export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
+  const unwrappedParams = use(params);
+  const roomId = unwrappedParams.id;
+
+  const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
   const [videoUrl, setVideoUrl] = useState("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
-  const [activeVideoId, setActiveVideoId] = useState<string | null>("aqz-KE-bpKQ");
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [messages, setMessages] = useState(INITAL_MESSAGES);
   const [newMessage, setNewMessage] = useState("");
   const [flyingEmojis, setFlyingEmojis] = useState<{ id: number; emoji: string; left: number; rotation: number }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Simulate room fetching
+  useEffect(() => {
+    async function fetchRoom() {
+      try {
+        await new Promise(res => setTimeout(res, 500));
+
+        setRoom({
+          id: roomId,
+          title: roomId.includes("real") ? "Chill Beats & Study" : "My WatchParty Session",
+          url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+          membersCount: Math.floor(Math.random() * 10) + 1,
+          hostId: "user-123",
+          isHost: true,
+        });
+        setActiveVideoId(extractYoutubeId("https://www.youtube.com/watch?v=aqz-KE-bpKQ"));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchRoom();
+  }, [roomId]);
+
   const handlePlay = () => {
+    if (!room?.isHost) {
+      alert("Only the host can change the video!");
+      return;
+    }
+
     const id = extractYoutubeId(videoUrl);
     if (id) {
       setActiveVideoId(id);
     } else {
-      alert("Zadaj platnú YouTube URL, prosím.");
+      alert("Please enter a valid YouTube URL.");
     }
   };
 
@@ -62,7 +108,7 @@ export default function RoomPage() {
       ...prev,
       {
         id: Date.now(),
-        user: "Ty",
+        user: "You",
         text: newMessage,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isMe: true,
@@ -71,7 +117,6 @@ export default function RoomPage() {
     setNewMessage("");
   };
 
-  // Autoscroll chatu na spodok
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -80,31 +125,59 @@ export default function RoomPage() {
     const { id, left, rotation } = generateReactionContext();
     setFlyingEmojis((prev) => [...prev, { id, emoji, left, rotation }]);
 
-    // Emoji odstránime z listu po skončení animácie
     setTimeout(() => {
       setFlyingEmojis((prev) => prev.filter((e) => e.id !== id));
     }, 2500);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <p className="animate-pulse">Loading room...</p>
+      </div>
+    );
+  }
+
+  if (!room) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
+        <p>Room not found.</p>
+        <Button asChild><Link href="/hub">Back to Hub</Link></Button>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex flex-col font-sans text-foreground">
 
-      {/* Navbar miestnosti */}
+      {/* Room Header */}
       <header className="glass-card sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between px-6 border-x-0 border-t-0 rounded-none border-white/10 bg-card/40 backdrop-blur-2xl">
         <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary">
+          <Link href="/hub" className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
             <MonitorPlayIcon className="size-5" />
-          </div>
+          </Link>
           <div>
-            <h1 className="text-sm font-bold leading-tight">Friday Night Cinema</h1>
-            <p className="text-xs text-muted-foreground">3 účastníci v miestnosti</p>
+            <h1 className="text-sm font-bold leading-tight flex items-center gap-2">
+              {room.title}
+              {room.isHost && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">HOST</span>}
+            </h1>
+            <p className="text-xs text-muted-foreground">{room.membersCount} connected</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="glass-card border-primary/30 text-primary hover:bg-primary/20 gap-2 h-9">
+          <Button
+            variant="outline"
+            size="sm"
+            className="glass-card border-primary/30 text-primary hover:bg-primary/20 gap-2 h-9"
+            onClick={() => {
+              const joinUrl = `${window.location.origin}/room/join/${room.id}`;
+              navigator.clipboard.writeText(joinUrl);
+              alert("Invite link copied!");
+            }}
+          >
             <Share2Icon className="size-4" />
-            <span className="hidden sm:inline">Pozvať</span>
+            <span className="hidden sm:inline">Copy Invite</span>
           </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full glass-card hover:bg-white/10">
             <SettingsIcon className="size-4" />
@@ -112,35 +185,37 @@ export default function RoomPage() {
         </div>
       </header>
 
-      {/* Hlavný workspace (Video + Chat) */}
+      {/* Main Workspace */}
       <main className="flex-1 flex flex-col lg:flex-row gap-6 p-4 sm:p-6 overflow-hidden max-h-[calc(100vh-4rem)]">
 
-        {/* Ľavá časť: Prehrávač videa a ovládanie */}
+        {/* Video Column */}
         <section className="flex-1 flex flex-col gap-4 min-w-0">
 
-          {/* Vstup pre URL */}
-          <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
-            <div className="flex-1 w-full relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
-                <CopyIcon className="size-4" />
+          {/* Host Panel */}
+          {room.isHost && (
+            <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
+              <div className="flex-1 w-full relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
+                  <CopyIcon className="size-4" />
+                </div>
+                <Input
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Paste YouTube link here..."
+                  className="pl-10 h-12 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-base"
+                  onKeyDown={(e) => e.key === "Enter" && handlePlay()}
+                />
               </div>
-              <Input
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Vlož YouTube link zdroja..."
-                className="pl-10 h-12 bg-black/20 border-white/10 focus-visible:ring-primary/50 text-base"
-                onKeyDown={(e) => e.key === "Enter" && handlePlay()}
-              />
+              <Button size="lg" className="w-full sm:w-auto h-12 px-8 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2" onClick={handlePlay}>
+                <PlayIcon className="size-5 fill-current" />
+                <span className="font-semibold">Play for Everyone</span>
+              </Button>
             </div>
-            <Button size="lg" className="w-full sm:w-auto h-12 px-8 rounded-xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all gap-2" onClick={handlePlay}>
-              <PlayIcon className="size-5 fill-current" />
-              <span className="font-semibold">Prehrať pre všetkých</span>
-            </Button>
-          </div>
+          )}
 
-          {/* Samotný Video Prehrávač (16:9 kontajner) */}
+          {/* Video Player */}
           <div className="glass-card rounded-3xl flex-1 relative overflow-hidden bg-black/60 shadow-2xl min-h-[300px]">
-            {/* Vykreslenie plávajúcich emoji reakcií nad videom */}
+            {/* Flying Emojis */}
             <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
               {flyingEmojis.map(({ id, emoji, left, rotation }) => (
                 <div
@@ -170,22 +245,22 @@ export default function RoomPage() {
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
                 <MonitorPlayIcon className="size-16 mb-4 opacity-50" />
-                <p className="text-lg font-medium">Zatiaľ sa nič neprehráva</p>
-                <p className="text-sm">Vlož link a spusti prehrávanie</p>
+                <p className="text-lg font-medium">Nothing playing right now</p>
+                <p className="text-sm">Host will start a video soon.</p>
               </div>
             )}
           </div>
         </section>
 
-        {/* Pravá časť: Live Chat */}
+        {/* Live Chat Column */}
         <aside className="w-full lg:w-96 xl:w-[400px] flex flex-col shrink-0 gap-4 h-[500px] lg:h-auto">
           <div className="glass-card rounded-3xl flex flex-col h-full overflow-hidden border-white/10">
 
-            {/* Chat hlavička */}
+            {/* Chat Header */}
             <div className="p-4 border-b border-white/10 bg-black/10 shrink-0 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquareTextIcon className="size-5 text-primary" />
-                <h2 className="font-semibold text-lg">Miestny Chat</h2>
+                <h2 className="font-semibold text-lg">Room Chat</h2>
               </div>
               <div className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">
                 <span className="relative flex h-2 w-2">
@@ -196,7 +271,7 @@ export default function RoomPage() {
               </div>
             </div>
 
-            {/* Správy - Scroll zóna */}
+            {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}>
@@ -212,8 +287,8 @@ export default function RoomPage() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Quick Chat Reakcie - Buttons */}
-            <div className="px-4 py-2 shrink-0 bg-black/10 border-t border-white/5 flex items-center gap-2 overflow-x-auto">
+            {/* Quick Reactions Center */}
+            <div className="px-4 py-2 shrink-0 bg-black/10 border-t border-white/5 flex items-center justify-center gap-4 overflow-x-auto">
               {['😀', '😢', '😡', '❤️'].map((emoji) => (
                 <Button
                   key={emoji}
@@ -221,20 +296,20 @@ export default function RoomPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleReaction(emoji)}
-                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-lg transition-transform hover:scale-110"
+                  className="h-10 w-10 p-0 rounded-full hover:bg-white/10 text-xl transition-transform hover:scale-110"
                 >
                   {emoji}
                 </Button>
               ))}
             </div>
 
-            {/* Chat Vstup */}
+            {/* Chat Input */}
             <div className="p-4 pt-2 shrink-0 bg-black/10">
               <form onSubmit={handleSendMessage} className="relative flex items-center">
                 <Input
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Napíš správu..."
+                  placeholder="Type a message..."
                   className="pr-12 h-12 rounded-xl bg-black/20 border-white/10 focus-visible:ring-primary/50 text-sm"
                 />
                 <Button
