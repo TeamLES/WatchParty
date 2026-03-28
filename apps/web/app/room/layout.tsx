@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
+import { AuthenticatedHeader } from "@/components/app/authenticated-header";
 import { getAccessTokenFromCookies } from "@/lib/cookies";
 
 interface RoomLayoutProps {
@@ -14,5 +15,10 @@ export default async function RoomLayout({ children }: RoomLayoutProps) {
     redirect("/auth/login");
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <AuthenticatedHeader />
+      {children}
+    </>
+  );
 }

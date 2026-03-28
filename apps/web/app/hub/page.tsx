@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  LogOutIcon,
   LockIcon,
   GlobeIcon,
   UsersRoundIcon,
-  VideoIcon,
   SearchIcon,
   MonitorPlayIcon,
 } from "lucide-react";
@@ -61,14 +58,16 @@ export default function HubPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredRooms = rooms.filter(room => room.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredRooms = rooms.filter((room) =>
+    room.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const payload: Record<string, any> = {
+      const payload: { title: string; isPrivate: boolean; password?: string } = {
         title,
         isPrivate,
       };
@@ -100,30 +99,8 @@ export default function HubPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex flex-col font-sans text-foreground">
-
-      {/* Navbar */}
-      <header className="glass-card sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between px-6 sm:px-10 border-x-0 border-t-0 rounded-none border-white/10 bg-card/40 backdrop-blur-2xl">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary shadow-[0_0_15px_rgba(232,121,249,0.2)]">
-            <VideoIcon className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold leading-tight tracking-tight">WatchParty</h1>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm" className="h-9 glass-card hover:bg-white/10 gap-2">
-            <Link href="/logout">
-              <LogOutIcon className="size-4" />
-              <span className="hidden sm:inline font-medium">Sign Out</span>
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col gap-12 mt-4 pb-20">
+    <main className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(79,70,229,0.18),transparent_36%),radial-gradient(circle_at_50%_100%,rgba(147,51,234,0.16),transparent_45%)] font-sans text-foreground">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 p-4 pb-20 sm:p-8">
 
         {/* HERO CREATE SECTION */}
         <section className="glass-card rounded-[2rem] p-6 sm:p-12 border-white/10 relative overflow-hidden flex flex-col items-center text-center shadow-2xl">
@@ -228,11 +205,11 @@ export default function HubPage() {
                   <div className="absolute top-4 right-4">
                     {room.isPrivate ? (
                       <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-950/40 backdrop-blur-md gap-1">
-                        <LockIcon className="size-3"/> Private
+                        <LockIcon className="size-3" /> Private
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-950/40 backdrop-blur-md gap-1">
-                        <GlobeIcon className="size-3"/> Public
+                        <GlobeIcon className="size-3" /> Public
                       </Badge>
                     )}
                   </div>
@@ -244,18 +221,18 @@ export default function HubPage() {
                 <CardContent className="p-5 flex-1 flex flex-col pt-8">
                   <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">{room.title}</h3>
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
-                    <UsersRoundIcon className="size-4 opacity-70"/> {room.memberCount} currently watching
+                    <UsersRoundIcon className="size-4 opacity-70" /> {room.memberCount} currently watching
                   </div>
 
                   <div className="mt-auto pt-4 flex items-center justify-between border-t border-white/5">
                     <div className="flex -space-x-2">
-                       {/* Decorative avatars */}
-                       {[...Array(Math.min(3, room.memberCount))].map((_, i) => (
-                          <div key={i} className="w-7 h-7 rounded-full border border-black bg-zinc-800 flex justify-center items-center text-[8px] text-zinc-400 shadow-sm z-10">👤</div>
-                       ))}
-                       {room.memberCount > 3 && (
-                          <div className="w-7 h-7 rounded-full border border-black bg-primary/20 flex justify-center items-center text-[9px] text-primary font-bold shadow-sm z-10">+{room.memberCount - 3}</div>
-                       )}
+                      {/* Decorative avatars */}
+                      {[...Array(Math.min(3, room.memberCount))].map((_, i) => (
+                        <div key={i} className="w-7 h-7 rounded-full border border-black bg-zinc-800 flex justify-center items-center text-[8px] text-zinc-400 shadow-sm z-10">👤</div>
+                      ))}
+                      {room.memberCount > 3 && (
+                        <div className="w-7 h-7 rounded-full border border-black bg-primary/20 flex justify-center items-center text-[9px] text-primary font-bold shadow-sm z-10">+{room.memberCount - 3}</div>
+                      )}
                     </div>
                     <Button size="sm" variant="secondary" className="glass-card bg-primary/10 hover:bg-primary/20 text-primary font-semibold rounded-xl group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(232,121,249,0.05)]">
                       Join Party
@@ -266,7 +243,7 @@ export default function HubPage() {
             ))}
           </div>
         </section>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

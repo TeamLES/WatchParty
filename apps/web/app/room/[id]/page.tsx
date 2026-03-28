@@ -160,10 +160,10 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <div className="relative min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex flex-col font-sans text-foreground">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.16),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(147,51,234,0.15),transparent_50%)] flex flex-col font-sans text-foreground">
 
       {/* Room Header */}
-      <header className="glass-card sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between px-6 border-x-0 border-t-0 rounded-none border-white/10 bg-card/40 backdrop-blur-2xl">
+      <header className="glass-card sticky top-16 z-40 flex h-16 shrink-0 items-center justify-between px-6 border-x-0 border-t-0 rounded-none border-white/10 bg-card/40 backdrop-blur-2xl">
         <div className="flex items-center gap-4">
           <Link href="/hub" className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
             <MonitorPlayIcon className="size-5" />
