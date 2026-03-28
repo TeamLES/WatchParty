@@ -32,6 +32,7 @@ import { RoomIdParamDto } from './dto/room-id-param.dto';
 import {
   type CreateRoomInviteResponse,
   type CreateRoomResponse,
+  type GetRoomsResponse,
   type GetRoomMembersResponse,
   type GetRoomResponse,
   type JoinRoomResponse,
@@ -52,6 +53,31 @@ import {
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'Get all rooms' })
+  @ApiOkResponse({
+    description: 'Rooms listed',
+    schema: {
+      example: [
+        {
+          roomId: 'a1b2c3d4e5f6a7b8',
+          title: 'Friday Night Cinema',
+          videoUrl: null,
+          isPrivate: true,
+          password: 'watchparty123',
+          hostUserId: 'cognito-sub',
+          memberCount: 1,
+          status: 'active',
+          createdAt: '2026-03-28T12:00:00.000Z',
+        },
+      ],
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  async getRooms(): Promise<GetRoomsResponse> {
+    return this.roomsService.getRooms();
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a room and assign current user as host' })
   @ApiBody({ type: CreateRoomDto })
@@ -61,7 +87,9 @@ export class RoomsController {
       example: {
         roomId: 'a1b2c3d4e5f6a7b8',
         title: 'Friday Night Cinema',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: null,
+        isPrivate: true,
+        password: 'watchparty123',
         hostUserId: 'cognito-sub',
         memberCount: 1,
         status: 'active',
@@ -88,7 +116,9 @@ export class RoomsController {
       example: {
         roomId: 'a1b2c3d4e5f6a7b8',
         title: 'Friday Night Cinema',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: null,
+        isPrivate: true,
+        password: 'watchparty123',
         hostUserId: 'cognito-sub',
         memberCount: 2,
         status: 'active',

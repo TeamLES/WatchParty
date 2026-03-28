@@ -12,7 +12,9 @@ export interface RoomMetaItem {
   entityType: 'ROOM';
   roomId: string;
   title: string;
-  videoUrl: string;
+  videoUrl?: string;
+  isPrivate?: boolean;
+  password?: string;
   hostUserId: string;
   status: 'active';
   createdAt: string;
@@ -64,7 +66,9 @@ export function toRoomMetaItem(room: Room): RoomMetaItem {
     entityType: 'ROOM',
     roomId: room.roomId,
     title: room.title,
-    videoUrl: room.videoUrl,
+    ...(room.videoUrl ? { videoUrl: room.videoUrl } : {}),
+    isPrivate: room.isPrivate,
+    ...(room.password ? { password: room.password } : {}),
     hostUserId: room.hostUserId,
     status: room.status,
     createdAt: room.createdAt,
@@ -103,18 +107,26 @@ export function fromRoomMetaItem(item: UnknownItem | undefined): Room | null {
 
   const roomId = readString(item.roomId);
   const title = readString(item.title);
-  const videoUrl = readString(item.videoUrl);
+  const videoUrl = readNullableString(item.videoUrl);
+  const isPrivate = readBoolean(item.isPrivate) ?? false;
+  const password = readNullableString(item.password);
   const hostUserId = readString(item.hostUserId);
   const createdAt = readString(item.createdAt);
 
-  if (!roomId || !title || !videoUrl || !hostUserId || !createdAt) {
+  if (!roomId || !title || !hostUserId || !createdAt) {
+    return null;
+  }
+
+  if (isPrivate && !password) {
     return null;
   }
 
   return {
     roomId,
     title,
-    videoUrl,
+    ...(videoUrl ? { videoUrl } : {}),
+    isPrivate,
+    ...(password ? { password } : {}),
     hostUserId,
     status: 'active',
     createdAt,
@@ -185,4 +197,8 @@ function readNullableString(value: unknown): string | null {
   }
 
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
 }

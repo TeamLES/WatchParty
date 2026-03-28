@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import type { RoomInvite } from '../entities/room-invite.entity';
 import type { RoomMember } from '../entities/room-member.entity';
@@ -10,12 +10,18 @@ import {
 
 @Injectable()
 export class InMemoryRoomsRepository implements RoomsRepository {
+  private readonly logger = new Logger(InMemoryRoomsRepository.name);
   private readonly roomsById = new Map<string, Room>();
   private readonly membersByRoomId = new Map<string, Map<string, RoomMember>>();
   private readonly invitesByRoomId = new Map<string, Map<string, RoomInvite>>();
   private readonly invitesByCode = new Map<string, RoomInvite>();
 
+  constructor() {
+    this.logger.log('driver=inmemory initialized');
+  }
+
   async createRoom(room: Room): Promise<Room> {
+    this.logger.log(`createRoom roomId=${room.roomId} hostUserId=${room.hostUserId}`);
     const existingRoom = this.roomsById.get(room.roomId);
 
     if (existingRoom) {
@@ -35,12 +41,23 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return this.cloneRoom(room);
   }
 
+  async listRooms(): Promise<Room[]> {
+    this.logger.log('listRooms');
+
+    return Array.from(this.roomsById.values())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((room) => this.cloneRoom(room));
+  }
+
   async getRoomById(roomId: string): Promise<Room | null> {
+    this.logger.log(`getRoomById roomId=${roomId}`);
     const room = this.roomsById.get(roomId);
+    this.logger.log(`getRoomById result roomId=${roomId} found=${Boolean(room)}`);
     return room ? this.cloneRoom(room) : null;
   }
 
   async addMember(member: RoomMember): Promise<RoomMember> {
+    this.logger.log(`addMember roomId=${member.roomId} userId=${member.userId}`);
     let roomMembers = this.membersByRoomId.get(member.roomId);
 
     if (!roomMembers) {
@@ -64,6 +81,7 @@ export class InMemoryRoomsRepository implements RoomsRepository {
   }
 
   async getMembersByRoomId(roomId: string): Promise<RoomMember[]> {
+    this.logger.log(`getMembersByRoomId roomId=${roomId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
 
     if (!roomMembers) {

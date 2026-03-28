@@ -10,10 +10,15 @@ export class RoomAlreadyExistsError extends Error {
 
 export interface RoomsRepository {
   createRoom(room: Room): Promise<Room>;
+  listRooms(): Promise<Room[]>;
+
+  // Room lookup must be scoped only by roomId, never by current user.
   getRoomById(roomId: string): Promise<Room | null>;
 
   addMember(member: RoomMember): Promise<RoomMember>;
   getMember(roomId: string, userId: string): Promise<RoomMember | null>;
+
+  // Members lookup must stay in the room partition (PK=ROOM#<roomId>).
   getMembersByRoomId(roomId: string): Promise<RoomMember[]>;
   countMembers(roomId: string): Promise<number>;
 

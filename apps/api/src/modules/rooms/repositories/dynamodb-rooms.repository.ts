@@ -1,5 +1,9 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  GetCallerIdentityCommand,
+  STSClient,
+} from '@aws-sdk/client-sts';
+import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -9,6 +13,7 @@ import {
 import {
   Injectable,
   InternalServerErrorException,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -35,17 +40,24 @@ import {
 
 @Injectable()
 export class DynamoDBRoomsRepository implements RoomsRepository {
+  private readonly logger = new Logger(DynamoDBRoomsRepository.name);
   private readonly documentClient: DynamoDBDocumentClient;
   private readonly tableName: string | undefined;
   private readonly region: string;
+  private readonly endpoint: string | undefined;
+  private readonly profile: string | undefined;
+  private readonly hasStaticCredentials: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const region = this.configService.get<string>('AWS_REGION') ?? 'eu-central-1';
     const endpoint = this.configService.get<string>('DYNAMODB_ENDPOINT');
+    const profile = this.configService.get<string>('AWS_PROFILE');
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
     const sessionToken = this.configService.get<string>('AWS_SESSION_TOKEN');
     this.region = region;
+    this.endpoint = endpoint;
+    this.profile = profile;
 
     const staticCredentials =
       accessKeyId && secretAccessKey
@@ -55,12 +67,15 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
             ...(sessionToken ? { sessionToken } : {}),
           }
         : undefined;
+    this.hasStaticCredentials = Boolean(staticCredentials);
 
-    const ddbClient = new DynamoDBClient({
+    const clientConfig = {
       region,
       ...(endpoint ? { endpoint } : {}),
       ...(staticCredentials ? { credentials: staticCredentials } : {}),
-    });
+    };
+
+    const ddbClient = new DynamoDBClient(clientConfig);
 
     this.documentClient = DynamoDBDocumentClient.from(ddbClient, {
       marshallOptions: {
@@ -69,15 +84,32 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     });
 
     this.tableName = this.configService.get<string>('DYNAMODB_ROOMS_TABLE');
+
+    this.logger.log(
+      [
+        'driver=dynamodb initialized',
+        `region=${this.region}`,
+        `table=${this.tableName ?? '(unset)'}`,
+        `profile=${this.profile ?? '(none)'}`,
+        `endpoint=${this.endpoint ?? '(aws-default)'}`,
+        `hasStaticCredentials=${this.hasStaticCredentials}`,
+      ].join(' '),
+    );
+
+    void this.logCallerIdentity(clientConfig);
   }
 
   async createRoom(room: Room): Promise<Room> {
+    const tableName = this.getRequiredTableName();
+    this.logger.log(
+      `createRoom roomId=${room.roomId} hostUserId=${room.hostUserId} table=${tableName}`,
+    );
     const item = toRoomMetaItem(room);
 
     try {
       await this.documentClient.send(
         new PutCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           Item: item,
           ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)',
         }),
@@ -93,13 +125,61 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     return room;
   }
 
+  async listRooms(): Promise<Room[]> {
+    const tableName = this.getRequiredTableName();
+    this.logger.log(`listRooms table=${tableName}`);
+
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    try {
+      do {
+        const response = await this.documentClient.send(
+          new ScanCommand({
+            TableName: tableName,
+            FilterExpression: '#entityType = :entityType AND #sk = :metaSk',
+            ExpressionAttributeNames: {
+              '#entityType': 'entityType',
+              '#sk': 'SK',
+            },
+            ExpressionAttributeValues: {
+              ':entityType': 'ROOM',
+              ':metaSk': 'META',
+            },
+            ...(lastEvaluatedKey
+              ? { ExclusiveStartKey: lastEvaluatedKey }
+              : {}),
+          }),
+        );
+
+        items.push(...(response.Items ?? []).map((item) => asRecord(item) ?? {}));
+        lastEvaluatedKey = asRecord(response.LastEvaluatedKey);
+      } while (lastEvaluatedKey);
+    } catch (error) {
+      throw this.toInfrastructureException('listRooms', error);
+    }
+
+    const rooms = items
+      .map((item) => fromRoomMetaItem(item))
+      .filter((room): room is Room => room !== null)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    this.logger.log(`listRooms result count=${rooms.length}`);
+
+    return rooms;
+  }
+
   async getRoomById(roomId: string): Promise<Room | null> {
+    const tableName = this.getRequiredTableName();
+    this.logger.log(
+      `getRoomById roomId=${roomId} table=${tableName} pk=${buildRoomPk(roomId)}`,
+    );
     let response;
 
     try {
       response = await this.documentClient.send(
         new GetCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           Key: {
             PK: buildRoomPk(roomId),
             SK: buildMetaSk(),
@@ -110,16 +190,20 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
       throw this.toInfrastructureException('getRoomById', error);
     }
 
-    return fromRoomMetaItem(asRecord(response.Item));
+    const room = fromRoomMetaItem(asRecord(response.Item));
+    this.logger.log(`getRoomById result roomId=${roomId} found=${Boolean(room)}`);
+    return room;
   }
 
   async addMember(member: RoomMember): Promise<RoomMember> {
+    const tableName = this.getRequiredTableName();
+    this.logger.log(`addMember roomId=${member.roomId} userId=${member.userId}`);
     const item = toRoomMemberItem(member);
 
     try {
       await this.documentClient.send(
         new PutCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           Item: item,
           ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)',
         }),
@@ -141,12 +225,13 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
   }
 
   async getMember(roomId: string, userId: string): Promise<RoomMember | null> {
+    const tableName = this.getRequiredTableName();
     let response;
 
     try {
       response = await this.documentClient.send(
         new GetCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           Key: {
             PK: buildRoomPk(roomId),
             SK: buildMemberSk(userId),
@@ -161,12 +246,14 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
   }
 
   async getMembersByRoomId(roomId: string): Promise<RoomMember[]> {
+    const tableName = this.getRequiredTableName();
+    this.logger.log(`getMembersByRoomId roomId=${roomId} table=${tableName}`);
     let response;
 
     try {
       response = await this.documentClient.send(
         new QueryCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :memberPrefix)',
           ExpressionAttributeValues: {
             ':pk': buildRoomPk(roomId),
@@ -183,16 +270,19 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
       .filter((member): member is RoomMember => member !== null)
       .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
 
+    this.logger.log(`getMembersByRoomId result roomId=${roomId} count=${members.length}`);
+
     return members;
   }
 
   async countMembers(roomId: string): Promise<number> {
+    const tableName = this.getRequiredTableName();
     let response;
 
     try {
       response = await this.documentClient.send(
         new QueryCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :memberPrefix)',
           ExpressionAttributeValues: {
             ':pk': buildRoomPk(roomId),
@@ -209,12 +299,13 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
   }
 
   async createInvite(invite: RoomInvite): Promise<RoomInvite> {
+    const tableName = this.getRequiredTableName();
     const item = toRoomInviteItem(invite);
 
     try {
       await this.documentClient.send(
         new PutCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           Item: item,
           ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)',
         }),
@@ -227,12 +318,13 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
   }
 
   async getInviteByCode(inviteCode: string): Promise<RoomInvite | null> {
+    const tableName = this.getRequiredTableName();
     let response;
 
     try {
       response = await this.documentClient.send(
         new ScanCommand({
-          TableName: this.getRequiredTableName(),
+          TableName: tableName,
           FilterExpression: '#entityType = :entityType AND inviteCode = :inviteCode',
           ExpressionAttributeNames: {
             '#entityType': 'entityType',
@@ -270,7 +362,13 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
 
     if (errorName === 'CredentialsProviderError') {
       return new ServiceUnavailableException(
-        'DynamoDB credentials are missing. Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (optionally AWS_SESSION_TOKEN) in env, or configure an AWS profile and run aws sso login.',
+        [
+          'DynamoDB credentials are missing.',
+          `region=${this.region}`,
+          `table=${this.tableName ?? '(unset)'}`,
+          `profile=${this.profile ?? '(none)'}`,
+          'Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (optionally AWS_SESSION_TOKEN), or configure AWS_PROFILE and run aws sso login.',
+        ].join(' '),
       );
     }
 
@@ -306,6 +404,35 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
       : new ServiceUnavailableException(
           `DynamoDB request failed during ${operation}.`,
         );
+  }
+
+  private async logCallerIdentity(clientConfig: {
+    region: string;
+    endpoint?: string;
+    credentials?: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    };
+  }): Promise<void> {
+    if (this.endpoint) {
+      this.logger.log(
+        'Skipping STS account lookup because DYNAMODB_ENDPOINT override is set',
+      );
+      return;
+    }
+
+    try {
+      const stsClient = new STSClient(clientConfig);
+      const identity = await stsClient.send(new GetCallerIdentityCommand({}));
+      this.logger.log(
+        `awsAccount=${identity.Account ?? '(unknown)'} awsArn=${identity.Arn ?? '(unknown)'}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resolve AWS account identity: ${getErrorName(error) ?? 'UnknownError'}`,
+      );
+    }
   }
 }
 

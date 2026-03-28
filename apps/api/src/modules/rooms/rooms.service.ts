@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
@@ -24,21 +25,27 @@ export interface RoomMemberResponse {
   joinedAt: string;
 }
 
-export interface CreateRoomResponse {
+export interface RoomSummaryResponse {
   roomId: string;
   title: string;
-  videoUrl: string;
+  videoUrl: string | null;
+  isPrivate: boolean;
+  password: string | null;
   hostUserId: string;
   memberCount: number;
   status: 'active';
   createdAt: string;
 }
 
-export interface GetRoomResponse extends CreateRoomResponse {
+export interface CreateRoomResponse extends RoomSummaryResponse {}
+
+export interface GetRoomResponse extends RoomSummaryResponse {
   members: RoomMemberResponse[];
   isHost: boolean;
   isMember: boolean;
 }
+
+export type GetRoomsResponse = RoomSummaryResponse[];
 
 export interface JoinRoomResponse {
   roomId: string;
@@ -64,23 +71,44 @@ export interface GetRoomMembersResponse {
 
 @Injectable()
 export class RoomsService {
+  private readonly logger = new Logger(RoomsService.name);
+
   constructor(
     @Inject(ROOMS_REPOSITORY)
     private readonly roomsRepository: RoomsRepository,
-  ) {}
+  ) {
+    this.logger.log(
+      `initialized repository=${this.roomsRepository.constructor.name}`,
+    );
+  }
 
   async createRoom(
     userId: string,
     createRoomDto: CreateRoomDto,
   ): Promise<CreateRoomResponse> {
+    this.logger.log(`createRoom userId=${userId}`);
     const maxAttempts = 3;
+    const isPrivate = createRoomDto.isPrivate === true;
+    const password = createRoomDto.password;
+
+    if (isPrivate && !password) {
+      throw new BadRequestException('password is required when isPrivate is true');
+    }
+
+    if (!isPrivate && password) {
+      throw new BadRequestException(
+        'password can be provided only when isPrivate is true',
+      );
+    }
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const createdAt = this.nowIsoString();
       const room: Room = {
         roomId: this.generateRoomId(),
         title: createRoomDto.title,
-        videoUrl: createRoomDto.videoUrl,
+        ...(createRoomDto.videoUrl ? { videoUrl: createRoomDto.videoUrl } : {}),
+        isPrivate,
+        ...(password ? { password } : {}),
         hostUserId: userId,
         status: 'active',
         createdAt,
@@ -97,17 +125,14 @@ export class RoomsService {
         await this.roomsRepository.createRoom(room);
         await this.roomsRepository.addMember(hostMember);
 
-        return {
-          roomId: room.roomId,
-          title: room.title,
-          videoUrl: room.videoUrl,
-          hostUserId: room.hostUserId,
-          memberCount: 1,
-          status: room.status,
-          createdAt: room.createdAt,
-        };
+        this.logger.log(`createRoom success roomId=${room.roomId} host=${userId}`);
+
+        return this.toRoomSummaryResponse(room, 1);
       } catch (error) {
         if (error instanceof RoomAlreadyExistsError && attempt < maxAttempts) {
+          this.logger.warn(
+            `createRoom collision roomId=${room.roomId} attempt=${attempt}`,
+          );
           continue;
         }
 
@@ -118,7 +143,22 @@ export class RoomsService {
     throw new Error('Failed to allocate a unique roomId');
   }
 
+  async getRooms(): Promise<GetRoomsResponse> {
+    this.logger.log('getRooms');
+    const rooms = await this.roomsRepository.listRooms();
+
+    const roomSummaries = await Promise.all(
+      rooms.map(async (room) => {
+        const memberCount = await this.roomsRepository.countMembers(room.roomId);
+        return this.toRoomSummaryResponse(room, memberCount);
+      }),
+    );
+
+    return roomSummaries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   async getRoom(roomId: string, userId: string): Promise<GetRoomResponse> {
+    this.logger.log(`getRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
     const members = await this.roomsRepository.getMembersByRoomId(roomId);
     const memberCount = members.length;
@@ -126,13 +166,7 @@ export class RoomsService {
     const isMember = members.some((member) => member.userId === userId);
 
     return {
-      roomId: room.roomId,
-      title: room.title,
-      videoUrl: room.videoUrl,
-      hostUserId: room.hostUserId,
-      memberCount,
-      status: room.status,
-      createdAt: room.createdAt,
+      ...this.toRoomSummaryResponse(room, memberCount),
       members: members.map((member) => this.toRoomMemberResponse(member)),
       isHost,
       isMember,
@@ -140,10 +174,12 @@ export class RoomsService {
   }
 
   async joinRoom(roomId: string, userId: string): Promise<JoinRoomResponse> {
+    this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
     const existingMember = await this.roomsRepository.getMember(roomId, userId);
 
     if (existingMember) {
+      this.logger.log(`joinRoom alreadyMember roomId=${roomId} userId=${userId}`);
       return {
         roomId,
         userId: existingMember.userId,
@@ -161,6 +197,8 @@ export class RoomsService {
     };
 
     const addedMember = await this.roomsRepository.addMember(member);
+
+    this.logger.log(`joinRoom success roomId=${roomId} userId=${userId}`);
 
     return {
       roomId,
@@ -217,6 +255,7 @@ export class RoomsService {
     const room = await this.roomsRepository.getRoomById(roomId);
 
     if (!room) {
+      this.logger.warn(`getRoomOrThrow notFound roomId=${roomId}`);
       throw new NotFoundException('Room not found');
     }
 
@@ -245,6 +284,23 @@ export class RoomsService {
       userId: member.userId,
       role: member.role,
       joinedAt: member.joinedAt,
+    };
+  }
+
+  private toRoomSummaryResponse(
+    room: Room,
+    memberCount: number,
+  ): RoomSummaryResponse {
+    return {
+      roomId: room.roomId,
+      title: room.title,
+      videoUrl: room.videoUrl ?? null,
+      isPrivate: room.isPrivate,
+      password: room.password ?? null,
+      hostUserId: room.hostUserId,
+      memberCount,
+      status: room.status,
+      createdAt: room.createdAt,
     };
   }
 
