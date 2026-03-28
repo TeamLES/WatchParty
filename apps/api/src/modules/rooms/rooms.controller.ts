@@ -193,7 +193,7 @@ export class RoomsController {
     @Param() params: RoomIdParamDto,
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<GetRoomResponse> {
-    const userId = this.getRequiredUserSub(user);
+    const userId = user?.sub || 'guest';
     return this.roomsService.getRoom(params.roomId, userId);
   }
 
@@ -221,7 +221,7 @@ export class RoomsController {
     @Body() joinRoomDto: JoinRoomDto,
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<JoinRoomResponse> {
-    const userId = this.getRequiredUserSub(user);
+    const userId = user?.sub || `guest-${Math.random().toString(36).substring(7)}`;
     return this.roomsService.joinRoom(params.roomId, userId, joinRoomDto);
   }
 

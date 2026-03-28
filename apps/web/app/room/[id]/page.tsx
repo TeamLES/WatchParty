@@ -66,7 +66,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [isDeleting, setIsDeleting] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
+  const [editTitle, setEditTitle] = useState("");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -92,6 +94,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           hostId: data.hostUserId,
           isHost: typeof data.isHost === "boolean" ? data.isHost : undefined,
         });
+
+        setEditTitle(data.title);
 
         if (data.videoUrl) {
           setVideoUrl(data.videoUrl);
@@ -219,6 +223,30 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }, 2500);
   };
 
+  const handleUpdateSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!room?.isHost || !editTitle.trim() || editTitle === room.title) {
+      setShowSettingsModal(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editTitle.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update room title");
+
+      setRoom(prev => prev ? { ...prev, title: editTitle.trim() } : null);
+      setShowSettingsModal(false);
+    } catch (err) {
+      console.error(err);
+      alert("Error updating room settings.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center text-white">
@@ -300,7 +328,12 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                   </Button>
                 )}
 
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowSettingsModal(true)}
+                >
                   <SettingsIcon className="size-5" />
                 </Button>
               </div>
@@ -494,6 +527,70 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} title="Room Settings">
+        <form onSubmit={handleUpdateSettings} className="flex flex-col gap-6">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-muted-foreground">
+              Room Title
+            </label>
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              disabled={!room?.isHost}
+              className="bg-black/30 border-white/10 h-12 rounded-xl focus-visible:ring-primary/50 text-base"
+              placeholder="Enter room title..."
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-sm font-semibold text-muted-foreground">
+              Current Members ({room?.membersCount})
+            </label>
+            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {/* Mock members list for UI showcase */}
+              {[...Array(room?.membersCount || 1)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+                      {i === 0 ? 'M' : `U${i}`}
+                    </div>
+                    <span className="text-sm font-medium">
+                      {i === 0 ? 'Me (You)' : `User ${i}`}
+                      {i === 0 && room?.isHost && <span className="ml-2 text-[10px] text-primary">HOST</span>}
+                    </span>
+                  </div>
+                  {room?.isHost && i !== 0 && (
+                    <Button type="button" variant="ghost" size="sm" className="h-8 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg px-3">
+                      Kick
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowSettingsModal(false)}
+              className="flex-1 rounded-xl hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            {room?.isHost && (
+              <Button
+                type="submit"
+                className="flex-1 rounded-xl shadow-[0_0_15px_rgba(232,121,249,0.2)] hover:shadow-[0_0_20px_rgba(232,121,249,0.3)] transition-all"
+                disabled={!editTitle.trim() || editTitle === room.title}
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        </form>
       </Modal>
 
     </div>
