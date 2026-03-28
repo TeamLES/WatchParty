@@ -1,6 +1,5 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import {
-  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,7 +21,6 @@ export interface AuthMeResponse {
 }
 
 @ApiTags('auth')
-@ApiBearerAuth('access-token')
 @Controller('api/auth')
 export class AuthController {
   @UseGuards(CognitoAuthGuard)

@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
-  ApiBearerAuth,
   ApiBody,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -41,7 +40,6 @@ import {
 
 @Controller('api/rooms')
 @ApiTags('rooms')
-@ApiBearerAuth('access-token')
 @UseGuards(CognitoAuthGuard)
 @UsePipes(
   new ValidationPipe({
