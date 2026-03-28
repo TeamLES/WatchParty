@@ -9,6 +9,6 @@ import { CognitoJwtVerifierService } from './cognito-jwt-verifier.service';
   imports: [ConfigModule],
   controllers: [AuthController],
   providers: [CognitoJwtVerifierService, CognitoAuthGuard],
-  exports: [CognitoJwtVerifierService],
+  exports: [CognitoJwtVerifierService, CognitoAuthGuard],
 })
 export class AuthModule { }
