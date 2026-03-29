@@ -36,15 +36,15 @@ export async function AuthenticatedHeader() {
   const userLabel = currentUser?.username ?? currentUser?.sub ?? null;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/35 backdrop-blur-2xl">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/hub" className="group flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-primary/15 text-primary shadow-[0_0_20px_rgba(168,85,247,0.25)] transition group-hover:scale-[1.02] group-hover:bg-primary/20">
-            <MonitorPlayIcon className="size-5" />
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/40 backdrop-blur-2xl">
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-3 sm:h-16 sm:px-6 lg:px-8">
+        <Link href="/hub" className="group flex items-center gap-2.5 sm:gap-3.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/15 text-primary shadow-[0_0_20px_rgba(168,85,247,0.25)] transition group-hover:scale-[1.02] group-hover:bg-primary/20 sm:h-10 sm:w-10 sm:rounded-xl">
+            <MonitorPlayIcon className="size-4.5 sm:size-5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold tracking-tight">WatchParty</p>
-            <p className="text-[11px] text-muted-foreground">Synchronized cinema</p>
+            <p className="text-sm font-semibold tracking-tight sm:text-base">WatchParty</p>
+            <p className="hidden text-[11px] text-muted-foreground sm:block">Synchronized cinema</p>
           </div>
         </Link>
 

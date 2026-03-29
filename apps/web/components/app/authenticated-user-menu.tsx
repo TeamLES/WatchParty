@@ -33,23 +33,24 @@ export function AuthenticatedUserMenu({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="h-10 rounded-full border border-white/10 bg-black/20 px-1.5 pr-2.5 backdrop-blur hover:bg-white/10"
+          className="h-9 rounded-full border border-white/10 bg-black/25 px-1.5 pr-1.5 backdrop-blur transition-colors hover:bg-white/10 sm:h-10 sm:pr-2.5"
+          aria-label={userLabel ? `Open account menu for ${userLabel}` : "Open account menu"}
         >
           <Avatar size="sm" className="ring-1 ring-white/10">
             <AvatarFallback className="bg-primary/20 font-semibold text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <span className="ml-2 hidden max-w-28 truncate text-xs font-medium text-muted-foreground sm:block">
+          <span className="ml-2 hidden max-w-32 truncate text-xs font-medium text-muted-foreground sm:block">
             {userLabel ?? "Account"}
           </span>
-          <ChevronDownIcon className="ml-1 size-4 text-muted-foreground" />
+          <ChevronDownIcon className="ml-1 hidden size-4 text-muted-foreground sm:block" />
         </Button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         align="end"
-        sideOffset={10}
+        sideOffset={8}
         className="w-56 border-white/10 bg-black/80 backdrop-blur-2xl"
       >
         {userLabel ? (
