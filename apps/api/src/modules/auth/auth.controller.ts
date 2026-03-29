@@ -8,17 +8,8 @@ import {
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CognitoAuthGuard } from '../../common/guards/cognito-auth.guard';
+import type { AuthMeResponse } from '@watchparty/shared-types';
 import type { VerifiedCognitoAccessToken } from './cognito-jwt-verifier.service';
-
-export interface AuthMeResponse {
-  sub: string;
-  username?: string;
-  scope?: string;
-  clientId?: string;
-  tokenUse: string;
-  issuedAt: number;
-  expiresAt: number;
-}
 
 @ApiTags('auth')
 @Controller('api/auth')

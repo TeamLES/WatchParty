@@ -1,6 +1,7 @@
 import { getAccessTokenFromCookies } from "@/lib/cookies";
 import { getWebPublicEnv } from "@/lib/env";
 import { joinUrl } from "@/lib/utils";
+import type { AuthMeResponse } from "@watchparty/shared-types";
 
 const COGNITO_SCOPES = ["openid", "email", "profile"];
 
@@ -15,16 +16,6 @@ export interface CognitoTokenResponse {
   refresh_token?: string;
   token_type: string;
   expires_in: number;
-}
-
-export interface AuthMeResponse {
-  sub: string;
-  username?: string;
-  scope?: string;
-  clientId?: string;
-  tokenUse?: string;
-  issuedAt?: number;
-  expiresAt?: number;
 }
 
 function withHttpsIfMissing(domain: string): string {

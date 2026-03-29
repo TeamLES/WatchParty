@@ -1,4 +1,6 @@
-import type { RoomMemberRole } from '../entities/room-member.entity';
+export type RoomStatus = "active" | "ended";
+
+export type RoomMemberRole = "host" | "viewer";
 
 export interface RoomMemberResponse {
   userId: string;
@@ -14,11 +16,11 @@ export interface RoomSummaryResponse {
   password: string | null;
   hostUserId: string;
   memberCount: number;
-  status: 'active';
+  status: RoomStatus;
   createdAt: string;
 }
 
-export interface CreateRoomResponse extends RoomSummaryResponse {}
+export type CreateRoomResponse = RoomSummaryResponse;
 
 export interface GetRoomResponse extends RoomSummaryResponse {
   members: RoomMemberResponse[];

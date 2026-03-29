@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Room } from "@/lib/types/rooms";
+import type { RoomSummaryResponse } from "@watchparty/shared-types";
 
 const extractYoutubeId = (url: string | null) => {
   if (!url) return null;
@@ -26,7 +26,7 @@ const extractYoutubeId = (url: string | null) => {
 
 export default function HubPage() {
   const router = useRouter();
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<RoomSummaryResponse[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
 
   useEffect(() => {

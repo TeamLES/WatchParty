@@ -6,7 +6,7 @@ Monorepo for the WatchParty platform.
 
 - `apps/web`: Next.js frontend
 - `apps/api`: NestJS backend API
-- `packages/contracts`: shared TypeScript contracts
+- `packages/shared-types`: shared TypeScript contracts
 
 ## Quick Start
 

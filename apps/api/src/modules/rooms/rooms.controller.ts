@@ -32,14 +32,14 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import {
-  type CreateRoomInviteResponse,
-  type CreateRoomResponse,
-  type GetRoomsResponse,
-  type GetRoomMembersResponse,
-  type GetRoomResponse,
-  type JoinRoomResponse,
-} from './types';
+import type {
+  CreateRoomInviteResponse,
+  CreateRoomResponse,
+  GetRoomsResponse,
+  GetRoomMembersResponse,
+  GetRoomResponse,
+  JoinRoomResponse,
+} from '@watchparty/shared-types';
 import { RoomsService } from './rooms.service';
 
 @Controller('api/rooms')

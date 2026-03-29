@@ -29,7 +29,7 @@ import type {
   JoinRoomResponse,
   RoomMemberResponse,
   RoomSummaryResponse,
-} from './types';
+} from '@watchparty/shared-types';
 
 @Injectable()
 export class RoomsService {
