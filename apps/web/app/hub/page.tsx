@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import type { Room } from "@/lib/types/rooms";
 
 const extractYoutubeId = (url: string | null) => {
   if (!url) return null;
@@ -22,18 +23,6 @@ const extractYoutubeId = (url: string | null) => {
   const match = url.match(regExp);
   return match && match[2].length === 11 ? match[2] : null;
 };
-
-interface Room {
-  roomId: string;
-  title: string;
-  videoUrl: string | null;
-  isPrivate: boolean;
-  password?: string | null;
-  hostUserId: string;
-  memberCount: number;
-  status: string;
-  createdAt: string;
-}
 
 export default function HubPage() {
   const router = useRouter();
@@ -229,11 +218,11 @@ export default function HubPage() {
                   <div className="absolute top-4 right-4 z-10">
                     {room.isPrivate ? (
                       <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-950/40 backdrop-blur-md gap-1 shadow-sm">
-                        <LockIcon className="size-3"/> Private
+                        <LockIcon className="size-3" /> Private
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-950/40 backdrop-blur-md gap-1 shadow-sm">
-                        <GlobeIcon className="size-3"/> Public
+                        <GlobeIcon className="size-3" /> Public
                       </Badge>
                     )}
                   </div>

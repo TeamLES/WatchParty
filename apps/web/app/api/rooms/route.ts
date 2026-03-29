@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getAccessTokenFromCookies } from "@/lib/cookies";
 import { getWebPublicEnv } from "@/lib/env";
-
-function joinUrl(baseUrl: string, path: string): string {
-  const normalizedBase = baseUrl.replace(/\/+$/g, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizedBase}${normalizedPath}`;
-}
+import { joinUrl } from "@/lib/utils";
 
 export async function GET(): Promise<NextResponse> {
   const accessToken = await getAccessTokenFromCookies();

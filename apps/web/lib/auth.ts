@@ -1,5 +1,6 @@
 import { getAccessTokenFromCookies } from "@/lib/cookies";
 import { getWebPublicEnv } from "@/lib/env";
+import { joinUrl } from "@/lib/utils";
 
 const COGNITO_SCOPES = ["openid", "email", "profile"];
 
@@ -36,12 +37,6 @@ function withHttpsIfMissing(domain: string): string {
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/g, "");
-}
-
-function joinUrl(baseUrl: string, path: string): string {
-  const normalizedBase = normalizeBaseUrl(baseUrl);
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizedBase}${normalizedPath}`;
 }
 
 function getCognitoBaseUrl(): string {

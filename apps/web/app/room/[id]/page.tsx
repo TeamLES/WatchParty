@@ -17,16 +17,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-
-// Server Room Detail Type
-interface RoomDetail {
-  id: string;
-  title: string;
-  url: string;
-  membersCount: number;
-  hostId: string;
-  isHost?: boolean;
-}
+import type { RoomDetail } from "@/lib/types/rooms";
 
 // YouTube ID Extractor
 const extractYoutubeId = (url: string) => {

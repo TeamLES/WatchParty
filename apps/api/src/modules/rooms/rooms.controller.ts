@@ -39,8 +39,8 @@ import {
   type GetRoomMembersResponse,
   type GetRoomResponse,
   type JoinRoomResponse,
-  RoomsService,
-} from './rooms.service';
+} from './types';
+import { RoomsService } from './rooms.service';
 
 @Controller('api/rooms')
 @ApiTags('rooms')
@@ -53,7 +53,7 @@ import {
   }),
 )
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(private readonly roomsService: RoomsService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get all rooms' })

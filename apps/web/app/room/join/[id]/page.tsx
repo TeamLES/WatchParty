@@ -6,18 +6,14 @@ import { LockIcon, MonitorPlayIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-interface RoomDetail {
-  roomId: string;
-  isPrivate: boolean;
-}
+import type { JoinRoomDetail } from "@/lib/types/rooms";
 
 export default function JoinRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
   const router = useRouter();
 
-  const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [room, setRoom] = useState<JoinRoomDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [isJoining, setIsJoining] = useState(false);

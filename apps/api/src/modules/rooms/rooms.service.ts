@@ -9,67 +9,27 @@ import {
 import { randomBytes } from 'crypto';
 
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
-import { CreateRoomInviteDto } from './dto/create-room-invite.dto';
-import { CreateRoomDto } from './dto/create-room.dto';
-import { JoinRoomDto } from './dto/join-room.dto';
-import { UpdateRoomDto } from './dto/update-room.dto';
+import type { CreateRoomInviteDto } from './dto/create-room-invite.dto';
+import type { CreateRoomDto } from './dto/create-room.dto';
+import type { JoinRoomDto } from './dto/join-room.dto';
+import type { UpdateRoomDto } from './dto/update-room.dto';
 import type { RoomInvite } from './entities/room-invite.entity';
-import type { RoomMember, RoomMemberRole } from './entities/room-member.entity';
+import type { RoomMember } from './entities/room-member.entity';
 import type { Room } from './entities/room.entity';
 import {
   RoomAlreadyExistsError,
   type RoomsRepository,
 } from './repositories/rooms.repository';
-
-export interface RoomMemberResponse {
-  userId: string;
-  role: RoomMemberRole;
-  joinedAt: string;
-}
-
-export interface RoomSummaryResponse {
-  roomId: string;
-  title: string;
-  videoUrl: string | null;
-  isPrivate: boolean;
-  password: string | null;
-  hostUserId: string;
-  memberCount: number;
-  status: 'active';
-  createdAt: string;
-}
-
-export interface CreateRoomResponse extends RoomSummaryResponse {}
-
-export interface GetRoomResponse extends RoomSummaryResponse {
-  members: RoomMemberResponse[];
-  isHost: boolean;
-  isMember: boolean;
-}
-
-export type GetRoomsResponse = RoomSummaryResponse[];
-
-export interface JoinRoomResponse {
-  roomId: string;
-  userId: string;
-  role: RoomMemberRole;
-  joinedAt: string;
-  alreadyMember: boolean;
-}
-
-export interface CreateRoomInviteResponse {
-  roomId: string;
-  inviteCode: string;
-  createdBy: string;
-  createdAt: string;
-  expiresAt: string | null;
-}
-
-export interface GetRoomMembersResponse {
-  roomId: string;
-  memberCount: number;
-  members: RoomMemberResponse[];
-}
+import type {
+  CreateRoomInviteResponse,
+  CreateRoomResponse,
+  GetRoomMembersResponse,
+  GetRoomResponse,
+  GetRoomsResponse,
+  JoinRoomResponse,
+  RoomMemberResponse,
+  RoomSummaryResponse,
+} from './types';
 
 @Injectable()
 export class RoomsService {
