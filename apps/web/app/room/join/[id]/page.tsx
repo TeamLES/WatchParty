@@ -26,6 +26,21 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
           throw new Error("Pravdepodobne neexistuje");
         }
         const data = await res.json();
+
+        // If 'isPrivate' is true, we must NOT bypass, because we need the password.
+        // Also check if they already unlocked it in this session.
+        if (data.isPrivate) {
+          const isUnlocked = sessionStorage.getItem(`unlocked_room_${roomId}`);
+          if (isUnlocked) {
+            router.replace(`/room/${roomId}`);
+            return;
+          }
+        } else if (data.isMember) {
+          // Auto-bypass for public rooms if already a member
+          router.replace(`/room/${roomId}`);
+          return;
+        }
+
         setRoom(data);
       } catch (err) {
         console.error(err);
@@ -38,6 +53,13 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Require password for private rooms
+    if (room?.isPrivate && !password?.trim()) {
+      alert('Heslo je vyžadované pre private roomu');
+      return;
+    }
+
     setIsJoining(true);
 
     try {
@@ -55,12 +77,18 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
       });
 
       if (!res.ok) {
-        throw new Error("Nepodarilo sa pripojiť");
+        const errText = await res.text();
+        console.error("Join fallback response", res.status, errText);
+        throw new Error(`Nepodarilo sa pripojiť: ${res.status}`);
+      }
+
+      if (room?.isPrivate) {
+        sessionStorage.setItem(`unlocked_room_${roomId}`, "true");
       }
 
       router.replace(`/room/${roomId}`);
-    } catch {
-      alert("Failed to join the room (Incorrect password?).");
+    } catch (err: any) {
+      alert(`Chyba pri pripájaní: ${err.message}`);
       setIsJoining(false);
     }
   };
@@ -115,7 +143,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
 
           <Button
             type="submit"
-            disabled={isJoining}
+            disabled={isJoining || (room?.isPrivate && !password?.trim())}
             className="w-full h-14 text-base font-bold shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all rounded-xl"
           >
             {isJoining ? "Connecting..." : "Enter Room"}

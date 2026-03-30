@@ -211,6 +211,18 @@ export class RoomsService {
   ): Promise<JoinRoomResponse> {
     this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
+
+    // ALWAYS require and validate password for private rooms,
+    // even for the host or existing members, before allowing them to "join" again.
+    if (room.isPrivate) {
+      const providedPassword = joinRoomDto?.password?.trim() ?? '';
+      const storedPassword = room.password ?? '';
+
+      if (!providedPassword || providedPassword !== storedPassword) {
+        throw new ForbiddenException('Invalid password for private room');
+      }
+    }
+
     const existingMember = await this.roomsRepository.getMember(roomId, userId);
 
     if (existingMember) {
@@ -226,11 +238,6 @@ export class RoomsService {
       };
     }
 
-    if (room.isPrivate && room.hostUserId !== userId) {
-      if (room.password !== joinRoomDto?.password) {
-        throw new ForbiddenException('Invalid password for private room');
-      }
-    }
 
     const member: RoomMember = {
       roomId,
@@ -250,6 +257,24 @@ export class RoomsService {
       joinedAt: addedMember.joinedAt,
       alreadyMember: false,
     };
+  }
+
+  async leaveRoom(roomId: string, userId: string): Promise<void> {
+    this.logger.log(`leaveRoom roomId=${roomId} userId=${userId}`);
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.hostUserId === userId) {
+      throw new ForbiddenException('Host cannot leave the room, must delete it instead');
+    }
+
+    const member = await this.roomsRepository.getMember(roomId, userId);
+    if (!member) {
+      this.logger.warn(`leaveRoom not a member roomId=${roomId} userId=${userId}`);
+      return; // Idempotent: if not a member, do nothing
+    }
+
+    await this.roomsRepository.removeMember(roomId, userId);
+    this.logger.log(`leaveRoom success roomId=${roomId} userId=${userId}`);
   }
 
   async createInvite(
