@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="sk">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WatchParty – Špecifikácia a návrh systému</title>
+  <style>
+    :root {
+      --text: #1f2937;
+      --muted: #5b6472;
+      --border: #d7dce3;
+      --line: #e7ebf0;
+      --accent: #1f4b99;
+      --accent-soft: #eef4ff;
+      --bg: #ffffff;
+      --code-bg: #f6f8fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: #f3f4f6;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .document {
+      width: min(100%, 210mm);
+      margin: 0 auto;
+      padding: 18mm 18mm 20mm;
+      background: var(--bg);
+      min-height: 100vh;
+    }
+
+    .cover-page {
+      min-height: 250mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding-top: 8mm;
+    }
+
+    .cover-kicker {
+      display: inline-block;
+      margin-bottom: 14mm;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .cover-title {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .cover-subtitle {
+      margin: 10px 0 22px;
+      font-size: 20px;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 8px 18px;
+      max-width: 100%;
+      padding: 18px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cover-meta>div {
+      display: contents;
+    }
+
+    .meta-label {
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .meta-value {
+      color: var(--text);
+    }
+
+    .cover-note {
+      margin-top: 18mm;
+      max-width: 120mm;
+      padding-left: 14px;
+      border-left: 3px solid var(--accent);
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .toc-page ul {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .toc-page ul ul {
+      margin-top: 4px;
+    }
+
+    .toc-page li {
+      margin: 4px 0;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      color: #111827;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 20px;
+      line-height: 1.3;
+    }
+
+    h4 {
+      margin: 18px 0 8px;
+      font-size: 16px;
+    }
+
+    p,
+    ul,
+    ol,
+    table,
+    pre,
+    blockquote {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      padding-left: 24px;
+    }
+
+    li+li {
+      margin-top: 4px;
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px solid var(--line);
+      margin: 18px 0;
+    }
+
+    strong {
+      color: #111827;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow: auto;
+      line-height: 1.45;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.92em;
+    }
+
+    p code,
+    li code,
+    td code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1px 6px;
+    }
+
+    blockquote {
+      margin-left: 0;
+      padding: 10px 14px;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-soft);
+      color: #334155;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+      height: 0;
+    }
+
+    .mermaid {
+      margin: 16px 0 22px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      overflow: auto;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 14mm 16mm;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .document {
+        width: auto;
+        min-height: auto;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      pre,
+      table,
+      .mermaid {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      h2,
+      h3 {
+        break-after: avoid-page;
+      }
+    }
+
+    @media screen {
+      .document {
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="document">
+    <div class="cover-page">
+      <div class="cover-kicker">Cloud Systems · Phase #2 · Specification and Design</div>
+      <h1 class="cover-title">WatchParty</h1>
+      <p class="cover-subtitle">Špecifikácia a návrh cloudovej aplikácie</p>
+
+      <div class="cover-meta">
+        <div><span class="meta-label">Tím</span><span class="meta-value">Lukáš Čeč, Matej Bendík, Miroslav Hanisko,
+            Oliver Fecko, Benjamín Vateha</span></div>
+        <div><span class="meta-label">Akademický rok</span><span class="meta-value">2025/2026</span></div>
+        <div><span class="meta-label">Predmet</span><span class="meta-value">Cloudové systémy</span></div>
+        <div><span class="meta-label">Typ dokumentu</span><span class="meta-value">Špecifikácia a návrh systému</span>
+        </div>
+      </div>
+
+      <p class="cover-note">
+        Tento dokument opisuje cieľový návrh systému <strong>WatchParty</strong>.
+      </p>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="toc-page">
+      <h2 id="obsah">Obsah</h2>
+      <ul>
+        <li><a href="#1-%C3%BAvod">1. Úvod</a></li>
+        <li><a href="#2-preh%C4%BEad-projektu-watchparty">2. Prehľad projektu WatchParty</a>
+          <ul>
+            <li><a href="#21-cie%C4%BE-aplik%C3%A1cie">2.1 Cieľ aplikácie</a></li>
+            <li><a href="#22-hlavn%C3%A9-funkcionality">2.2 Hlavné funkcionality</a></li>
+            <li><a href="#23-mvp-a-roz%C5%A1%C3%ADren%C3%A9-funkcionality">2.3 MVP a rozšírené funkcionality</a></li>
+          </ul>
+        </li>
+        <li><a href="#3-anal%C3%BDza-po%C5%BEiadaviek">3. Analýza požiadaviek</a>
+          <ul>
+            <li><a href="#31-funk%C4%8Dn%C3%A9-po%C5%BEiadavky">3.1 Funkčné požiadavky</a></li>
+            <li><a href="#32-nefunk%C4%8Dn%C3%A9-po%C5%BEiadavky">3.2 Nefunkčné požiadavky</a></li>
+            <li><a href="#33-akt%C3%A9ri-syst%C3%A9mu">3.3 Aktéri systému</a></li>
+            <li><a href="#34-pou%C5%BE%C3%ADvate%C4%BEsk%C3%A9-pr%C3%ADpady-a-scen%C3%A1re">3.4 Používateľské prípady a
+                scenáre</a></li>
+            <li><a href="#35-d%C3%A1ta-z%C3%A1%C5%A5a%C5%BE-a-izol%C3%A1cia-miestnost%C3%AD">3.5 Dáta, záťaž a izolácia
+                miestností</a></li>
+          </ul>
+        </li>
+        <li><a href="#4-n%C3%A1vrh-architekt%C3%BAry-syst%C3%A9mu">4. Návrh architektúry systému</a>
+          <ul>
+            <li><a href="#41-architektonick%C3%BD-%C5%A1t%C3%BDl">4.1 Architektonický štýl</a></li>
+            <li><a href="#42-hlavn%C3%A9-komponenty-syst%C3%A9mu">4.2 Hlavné komponenty systému</a></li>
+            <li><a href="#43-d%C3%B4vod-rozdelenia-na-slu%C5%BEby">4.3 Dôvod rozdelenia na služby</a></li>
+            <li><a href="#44-d%C3%B4vod-nasadenia-do-cloudu">4.4 Dôvod nasadenia do cloudu</a></li>
+            <li><a href="#45-diagram-celkovej-architekt%C3%BAry">4.5 Diagram celkovej architektúry</a></li>
+          </ul>
+        </li>
+        <li><a href="#5-komunik%C3%A1cia-a-spracovanie-d%C3%A1t">5. Komunikácia a spracovanie dát</a>
+          <ul>
+            <li><a href="#51-rest-komunik%C3%A1cia">5.1 REST komunikácia</a></li>
+            <li><a href="#52-websocket-komunik%C3%A1cia">5.2 WebSocket komunikácia</a></li>
+            <li><a href="#53-messaging-a-asynchr%C3%B3nne-spracovanie">5.3 Messaging a asynchrónne spracovanie</a></li>
+            <li><a href="#54-konzistencia-d%C3%A1t-a-rozdelenie-%C3%BAdajov">5.4 Konzistencia dát a rozdelenie
+                údajov</a></li>
+            <li><a href="#55-sekven%C4%8Dn%C3%BD-diagram-synchroniz%C3%A1cie">5.5 Sekvenčný diagram synchronizácie</a>
+            </li>
+          </ul>
+        </li>
+        <li><a href="#6-n%C3%A1vrh-backendu">6. Návrh backendu</a>
+          <ul>
+            <li><a href="#61-preh%C4%BEad-backend-slu%C5%BEieb">6.1 Prehľad backend služieb</a></li>
+            <li><a href="#62-n%C3%A1vrh-api">6.2 Návrh API</a></li>
+            <li><a href="#63-n%C3%A1vrh-udalost%C3%AD-v-realtime-vrstve">6.3 Návrh udalostí v realtime vrstve</a></li>
+            <li><a href="#64-d%C3%A1tov%C3%BD-model">6.4 Dátový model</a></li>
+            <li><a href="#65-pseudok%C3%B3d-pre-sync-orchestrator">6.5 Pseudokód pre Sync Orchestrator</a></li>
+          </ul>
+        </li>
+        <li><a href="#7-n%C3%A1vrh-frontendu">7. Návrh frontendu</a>
+          <ul>
+            <li><a href="#71-typ-frontendu-a-hlavn%C3%A9-obrazovky">7.1 Typ frontendu a hlavné obrazovky</a></li>
+            <li><a href="#72-pou%C5%BE%C3%ADvate%C4%BEsk%C3%A9-scen%C3%A1re">7.2 Používateľské scenáre</a></li>
+            <li><a href="#73-komunik%C3%A1cia-frontendbackend-cez-api-gateway">7.3 Komunikácia frontend–backend cez API
+                Gateway</a></li>
+          </ul>
+        </li>
+        <li><a href="#8-pou%C5%BEit%C3%A9-cloud-technol%C3%B3gie-a-slu%C5%BEby">8. Použité cloud technológie a
+            služby</a>
+          <ul>
+            <li><a href="#81-vybran%C3%A1-platforma">8.1 Vybraná platforma</a></li>
+            <li><a href="#82-pou%C5%BEit%C3%A9-aws-slu%C5%BEby">8.2 Použité AWS služby</a></li>
+            <li><a href="#83-kontajnery-serverless-a-slu%C5%BEby-tret%C3%ADch-str%C3%A1n">8.3 Kontajnery, serverless a
+                služby tretích strán</a></li>
+          </ul>
+        </li>
+        <li><a href="#9-dopad-nasadenia-do-cloudu">9. Dopad nasadenia do cloudu</a>
+          <ul>
+            <li><a href="#91-%C5%A1k%C3%A1lovanie-a-elasticita">9.1 Škálovanie a elasticita</a></li>
+            <li><a href="#92-dostupnos%C5%A5-a-liveness">9.2 Dostupnosť a liveness</a></li>
+            <li><a href="#93-bezpe%C4%8Dnos%C5%A5-a-monitoring">9.3 Bezpečnosť a monitoring</a></li>
+            <li><a href="#94-rizik%C3%A1-a-obmedzenia">9.4 Riziká a obmedzenia</a></li>
+          </ul>
+        </li>
+        <li><a href="#10-z%C3%A1ver">10. Záver</a>
+    </div>
+
+    </li>
+    </ul>
+    <div class="page-break"></div>
+
+    <h2 id="1-úvod">1. Úvod</h2>
+    <p>WatchParty je cloudová webová aplikácia určená na synchronizované sledovanie videa vo virtuálnych miestnostiach.
+      Používateľ vytvorí miestnosť, pozve ďalších účastníkov a následne môžu všetci sledovať rovnaký obsah v rovnakom
+      čase. Keď hostiteľ spustí, pozastaví alebo posunie video, rovnaká zmena sa má prejaviť aj u ostatných členov
+      miestnosti.</p>
+    <p>Hlavným problémom, ktorý aplikácia rieši, je spojenie troch náročných vlastností:</p>
+    <ol>
+      <li><strong>realtime synchronizácia prehrávania</strong>,</li>
+      <li><strong>interaktívna komunikácia medzi používateľmi</strong>,</li>
+      <li><strong>schopnosť zvládnuť kolísavé zaťaženie a výpadky spojenia</strong>.</li>
+    </ol>
+    <p>Tento dokument opisuje návrh systému, jeho funkčné aj nefunkčné požiadavky, rozdelenie funkcionality do služieb,
+      návrh API, dátový model a využitie cloudových služieb. Dokument je pripravený ako Phase 2 odovzdávka pre predmet
+      <strong>Cloud Systems</strong> a zameriava sa na <strong>špecifikáciu a návrh</strong>, nie na detailný opis
+      aktuálneho prototypu.
+    </p>
+    <div class="page-break"></div>
+
+    <h2 id="2-prehľad-projektu-watchparty">2. Prehľad projektu WatchParty</h2>
+    <h3 id="21-cieľ-aplikácie">2.1 Cieľ aplikácie</h3>
+    <p>Cieľom aplikácie WatchParty je vytvoriť platformu, ktorá umožní skupine používateľov pozerať video spoločne, aj
+      keď sa fyzicky nenachádzajú na rovnakom mieste. Aplikácia má poskytovať:</p>
+    <ul>
+      <li>vytvorenie a správu miestnosti,</li>
+      <li>pozvanie ďalších používateľov pomocou odkazu alebo pozývacieho kódu,</li>
+      <li>ovládanie prehrávania hostiteľom,</li>
+      <li>priebežnú korekciu odchýlok medzi klientmi,</li>
+      <li>live chat a emoji reakcie,</li>
+      <li>odolnosť voči reconnectom a krátkodobým výpadkom.</li>
+    </ul>
+    <p>Z pohľadu cloudových systémov ide o aplikáciu, ktorá kombinuje <strong>HTTP API</strong>, <strong>realtime
+        komunikáciu cez WebSocket</strong>, <strong>stavové aj bezstavové spracovanie</strong>, <strong>distribuované
+        úložiská</strong> a <strong>event-driven doplnkové procesy</strong>.</p>
+    <h3 id="22-hlavné-funkcionality">2.2 Hlavné funkcionality</h3>
+    <p>Navrhovaná aplikácia poskytuje tieto hlavné funkcie:</p>
+    <ul>
+      <li>registráciu a prihlásenie používateľa,</li>
+      <li>vytvorenie miestnosti a nastavenie videa,</li>
+      <li>pripojenie do miestnosti cez odkaz alebo kód,</li>
+      <li>ovládanie prehrávania hostiteľom (<code>play</code>, <code>pause</code>, <code>seek</code>),</li>
+      <li>synchronizáciu prehrávania pre všetkých členov miestnosti,</li>
+      <li>live chat počas sledovania,</li>
+      <li>emoji reakcie v reálnom čase,</li>
+      <li>zobrazenie online používateľov v miestnosti,</li>
+      <li>reconnect a resync po strate spojenia,</li>
+      <li>zbieranie základnej telemetrie a prevádzkových metrík.</li>
+    </ul>
+    <h3 id="23-mvp-a-rozšírené-funkcionality">2.3 MVP a rozšírené funkcionality</h3>
+    <p>Aby bol systém implementovateľný v rámci študentského projektu a zároveň architektonicky presvedčivý, návrh
+      rozlišuje dve úrovne funkcionality.</p>
+    <p><strong>MVP funkcionalita:</strong></p>
+    <ul>
+      <li>vytvorenie miestnosti,</li>
+      <li>pozývacie odkazy,</li>
+      <li>ovládanie prehrávania hostiteľom,</li>
+      <li>korekcia driftu,</li>
+      <li>live chat,</li>
+      <li>emoji reakcie,</li>
+      <li>reconnect snapshot.</li>
+    </ul>
+    <p><strong>Rozšírené funkcionality:</strong></p>
+    <ul>
+      <li>moments / timestamp highlights,</li>
+      <li>limit kapacity miestnosti a waiting queue,</li>
+      <li>scheduled parties,</li>
+      <li>pripomienky,</li>
+      <li>inteligentnejší reconnect flow,</li>
+      <li>pokročilejšia moderácia chatu,</li>
+      <li>rozšírený analytics dashboard.</li>
+    </ul>
+    <p>Toto rozdelenie je dôležité aj z architektonického hľadiska. Hlavná synchronizačná cesta musí fungovať samostatne
+      a nesmie byť závislá od neskorších rozšírení, ktoré sa na ňu pripájajú asynchrónne.</p>
+    <div class="page-break"></div>
+
+    <h2 id="3-analýza-požiadaviek">3. Analýza požiadaviek</h2>
+    <h3 id="31-funkčné-požiadavky">3.1 Funkčné požiadavky</h3>
+    <p>Funkčné požiadavky hovoria o tom, <strong>čo má systém robiť</strong>.</p>
+    <p><strong>FR-01</strong> Používateľ sa musí vedieť autentifikovať cez centrálnu identitnú službu.<br />
+      <strong>FR-02</strong> Prihlásený používateľ musí vedieť vytvoriť novú miestnosť.<br />
+      <strong>FR-03</strong> Hostiteľ musí vedieť nastaviť názov miestnosti, adresu videa a typ miestnosti
+      (public/private).<br />
+      <strong>FR-04</strong> Používateľ musí vedieť vstúpiť do miestnosti cez URL alebo invite mechanizmus.<br />
+      <strong>FR-05</strong> Hostiteľ musí vedieť odosielať playback príkazy <code>play</code>, <code>pause</code>,
+      <code>seek</code>.<br />
+      <strong>FR-06</strong> Ostatní členovia miestnosti musia dostávať synchronizačné aktualizácie s minimálnou
+      latenciou.<br />
+      <strong>FR-07</strong> Systém musí poskytovať mechanizmus resynchronizácie pri reconnecte.<br />
+      <strong>FR-08</strong> Používatelia musia vedieť posielať chat správy do miestnosti.<br />
+      <strong>FR-09</strong> Používatelia musia vedieť odosielať emoji reakcie.<br />
+      <strong>FR-10</strong> Systém musí udržiavať informáciu o prítomnosti používateľov v miestnosti.<br />
+      <strong>FR-11</strong> Hostiteľ musí vedieť vygenerovať pozvánku pre miestnosť.<br />
+      <strong>FR-12</strong> Systém musí oddeliť kritickú synchronizačnú logiku od nekritických doplnkových
+      procesov.<br />
+      <strong>FR-13</strong> Systém musí zaznamenávať základné prevádzkové udalosti a metriky.
+    </p>
+    <h3 id="32-nefunkčné-požiadavky">3.2 Nefunkčné požiadavky</h3>
+    <p>Nefunkčné požiadavky hovoria o tom, <strong>ako dobre má systém fungovať</strong>.</p>
+    <p><strong>NFR-01 Latencia:</strong> prenos playback udalostí medzi hostiteľom a ostatnými členmi musí byť
+      nízkolatenčný.<br />
+      <strong>NFR-02 Škálovateľnosť:</strong> systém musí zvládnuť rast počtu miestností aj počtu súčasných WebSocket
+      spojení.<br />
+      <strong>NFR-03 Dostupnosť:</strong> výpadok jednej nekritickej časti systému nesmie znefunkčniť kritickú
+      synchronizačnú cestu.<br />
+      <strong>NFR-04 Konzistencia:</strong> aplikácia musí jasne definovať autoritatívny zdroj playback stavu.<br />
+      <strong>NFR-05 Bezpečnosť:</strong> prístup do REST aj WebSocket vrstvy musí byť chránený autentifikáciou a
+      autorizáciou.<br />
+      <strong>NFR-06 Izolácia zlyhaní:</strong> preťaženie chatu alebo oneskorená analytika nesmie ovplyvniť
+      <code>play</code>, <code>pause</code> a <code>seek</code>.<br />
+      <strong>NFR-07 Obnoviteľnosť:</strong> po reconnecte sa musí klient vedieť vrátiť do aktuálneho stavu
+      miestnosti.<br />
+      <strong>NFR-08 Pozorovateľnosť:</strong> systém musí poskytovať logy, metriky a alarmy pre dôležité toky.<br />
+      <strong>NFR-09 Rozšíriteľnosť:</strong> architektúra musí umožniť pridať ďalšie služby bez prepisovania jadra
+      systému.
+    </p>
+    <h3 id="33-aktéri-systému">3.3 Aktéri systému</h3>
+    <p>V systéme vystupujú títo hlavní aktéri:</p>
+    <ul>
+      <li><strong>Neprihlásený používateľ</strong> – vidí úvodnú stránku a môže byť presmerovaný na prihlasovací tok.
+      </li>
+      <li><strong>Prihlásený používateľ</strong> – môže vytvárať miestnosti, pripájať sa do nich a komunikovať.</li>
+      <li><strong>Hostiteľ</strong> – špeciálny člen miestnosti s oprávnením meniť playback stav a spravovať miestnosť.
+      </li>
+      <li><strong>Divák</strong> – bežný člen miestnosti, sleduje video, píše do chatu a posiela reakcie.</li>
+      <li><strong>Operátor systému</strong> – rieši monitoring, prevádzku a bezpečnosť.</li>
+      <li><strong>Externý identity provider</strong> – zabezpečuje prihlasovanie a vystavenie tokenov.</li>
+      <li><strong>Cloudové služby</strong> – API Gateway, messaging, storage a observability vrstva.</li>
+    </ul>
+    <h3 id="34-používateľské-prípady-a-scenáre">3.4 Používateľské prípady a scenáre</h3>
+    <h4 id="hlavné-používateľské-prípady">Hlavné používateľské prípady</h4>
+    <ol>
+      <li>Používateľ sa prihlási do aplikácie.</li>
+      <li>Používateľ vytvorí novú miestnosť.</li>
+      <li>Hostiteľ vygeneruje pozývací odkaz.</li>
+      <li>Divák sa pripojí do miestnosti.</li>
+      <li>Hostiteľ spustí alebo pozastaví video.</li>
+      <li>Hostiteľ posunie prehrávanie na iný čas.</li>
+      <li>Používateľ odošle chat správu.</li>
+      <li>Používateľ odošle reakciu.</li>
+      <li>Používateľ stratí spojenie a znovu sa pripojí.</li>
+      <li>Systém vytvorí telemetry event pre analytiku.</li>
+    </ol>
+    <h4 id="diagram-používateľských-prípadov">Diagram používateľských prípadov</h4>
+    <div class="mermaid">
+      flowchart TB
+      guest([Neprihlásený používateľ])
+      user([Prihlásený používateľ])
+      host([Hostiteľ])
+      viewer([Divák])
+      admin([Operátor])
+
+      uc1((Prihlásenie))
+      uc2((Vytvorenie miestnosti))
+      uc3((Pripojenie do miestnosti))
+      uc4((Vygenerovanie pozvánky))
+      uc5((Play / Pause / Seek))
+      uc6((Odoslanie chat správy))
+      uc7((Odoslanie reakcie))
+      uc8((Reconnect a resync))
+      uc9((Zobrazenie prítomnosti))
+      uc10((Monitoring systému))
+
+      guest --> uc1
+      user --> uc2
+      user --> uc3
+      host --> uc4
+      host --> uc5
+      viewer --> uc6
+      viewer --> uc7
+      viewer --> uc8
+      viewer --> uc9
+      host --> uc9
+      admin --> uc10
+
+    </div>
+    <h4 id="scenár-1-vytvorenie-miestnosti">Scenár 1 – vytvorenie miestnosti</h4>
+    <ol>
+      <li>Používateľ sa autentifikuje.</li>
+      <li>Frontend odošle <code>POST /rooms</code> cez REST API.</li>
+      <li>Party Service vytvorí metadáta miestnosti v DynamoDB.</li>
+      <li>Party Service uloží členstvo hostiteľa.</li>
+      <li>Frontend zobrazí novovytvorenú miestnosť a pripraví pozývací tok.</li>
+    </ol>
+    <h4 id="scenár-2-synchronizované-prehrávanie">Scenár 2 – synchronizované prehrávanie</h4>
+    <ol>
+      <li>Hostiteľ klikne na <code>play</code>.</li>
+      <li>Frontend odošle realtime udalosť do WebSocket vrstvy.</li>
+      <li>Sync Orchestrator overí oprávnenie hostiteľa a aktuálnu verziu playback stavu.</li>
+      <li>Nový playback stav sa uloží do Redis.</li>
+      <li>Udalosť sa odošle všetkým pripojeným klientom v miestnosti.</li>
+      <li>Klienti aplikujú lokálnu korekciu a pokračujú v prehrávaní.</li>
+    </ol>
+    <h4 id="scenár-3-reconnect-klienta">Scenár 3 – reconnect klienta</h4>
+    <ol>
+      <li>Divák dočasne stratí internetové spojenie.</li>
+      <li>WebSocket session zanikne alebo prestane posielať heartbeat.</li>
+      <li>Presence Service po uplynutí TTL odstráni diváka zo zoznamu online členov.</li>
+      <li>Divák sa znovu autentifikuje alebo obnoví spojenie.</li>
+      <li>Klient odošle <code>resync_request</code>.</li>
+      <li>Sync Orchestrator vráti aktuálny snapshot prehrávania.</li>
+      <li>Klient prehrávanie dorovná na autoritatívny stav miestnosti.</li>
+    </ol>
+    <h4 id="scenár-4-chat-počas-sledovania">Scenár 4 – chat počas sledovania</h4>
+    <ol>
+      <li>Používateľ odošle chat správu.</li>
+      <li>Realtime Gateway prijme udalosť a odovzdá ju Chat Service.</li>
+      <li>Správa sa uloží do perzistentného úložiska.</li>
+      <li>Správa sa odošle ostatným klientom.</li>
+      <li>Paralelne sa môže publikovať analytics event mimo kritickej synchronizačnej cesty.</li>
+    </ol>
+    <h3 id="35-dáta-záťaž-a-izolácia-miestností">3.5 Dáta, záťaž a izolácia miestností</h3>
+    <h4 id="zber-a-typy-dát">Zber a typy dát</h4>
+    <p>Aplikácia nepatrí do IoT ani data processing oblasti, preto nepotrebuje externý OpenLab zdroj ani zber
+      senzorických dát. Pracuje najmä s internými aplikačnými dátami:</p>
+    <ul>
+      <li>identity údaje používateľa,</li>
+      <li>metadáta miestnosti,</li>
+      <li>členstvo v miestnosti,</li>
+      <li>pozývacie údaje,</li>
+      <li>playback stav,</li>
+      <li>chat správy,</li>
+      <li>emoji reakcie,</li>
+      <li>telemetry eventy,</li>
+      <li>health a prevádzkové metriky.</li>
+    </ul>
+    <h4 id="záťaž-jednotlivých-komponentov">Záťaž jednotlivých komponentov</h4>
+    <p>Jednotlivé komponenty systému majú rozdielnu záťaž:</p>
+    <ul>
+      <li><strong>REST API / Party Service</strong> – stredná frekvencia, CRUD operácie a správa miestností.</li>
+      <li><strong>Realtime Gateway</strong> – vysoká frekvencia udalostí, drží WebSocket sessions.</li>
+      <li><strong>Sync Orchestrator</strong> – nízky objem dát na request, ale veľmi citlivý na latenciu.</li>
+      <li><strong>Chat Service</strong> – bursty pri populárnych miestnostiach, možné špičky pri veľkom počte reakcií.
+      </li>
+      <li><strong>Presence Service</strong> – pravidelné heartbeat udalosti od klientov.</li>
+      <li><strong>Analytics / Notifications</strong> – asynchrónne, nekritické pre hlavný tok.</li>
+    </ul>
+    <p>Tento rozdiel v záťaži je hlavným dôvodom, prečo je návrh rozdelený na viacero logických služieb.</p>
+    <h4 id="izolácia-a-viacnásobné-oddelenie-dát">Izolácia a viacnásobné oddelenie dát</h4>
+    <p>Aj keď WatchParty nie je B2B SaaS platforma s firemnými tenantmi, systém prirodzene pracuje s viacnásobnou
+      izoláciou dát. Základnou jednotkou izolácie je <strong>miestnosť</strong>.</p>
+    <p>Izolácia je riešená takto:</p>
+    <ul>
+      <li>každá miestnosť predstavuje logicky oddelený priestor,</li>
+      <li>dáta sú rozdelené podľa <code>roomId</code>,</li>
+      <li>chat, presence aj playback stav existujú samostatne pre každú miestnosť,</li>
+      <li>autorizácia overuje, či je používateľ oprávnený vstúpiť do konkrétnej miestnosti,</li>
+      <li>private rooms majú dodatočný vstupný mechanizmus,</li>
+      <li>iba hostiteľ má oprávnenie meniť autoritatívny playback stav.</li>
+    </ul>
+    <p>Takto sa zabráni miešaniu stavu medzi miestnosťami a systém vie prirodzene škálovať podľa ich počtu.</p>
+    <div class="page-break"></div>
+
+    <h2 id="4-návrh-architektúry-systému">4. Návrh architektúry systému</h2>
+    <h3 id="41-architektonický-štýl">4.1 Architektonický štýl</h3>
+    <p>Navrhovaný systém používa <strong>cloudovú architektúru orientovanú na služby</strong>, s oddelením:</p>
+    <ul>
+      <li>prezentačnej vrstvy,</li>
+      <li>aplikačnej a procesnej vrstvy,</li>
+      <li>dátovej vrstvy,</li>
+      <li>asynchrónnej event vrstvy.</li>
+    </ul>
+    <p>V praktickej implementácii môžu byť niektoré časti na začiatku nasadené v jednom backend deployable, ale návrh a
+      doménové hranice sú pripravené tak, aby ich bolo možné neskôr oddeliť bez zmeny zodpovedností.</p>
+    <p>Pre projekt je vhodné držať sa týchto princípov:</p>
+    <ul>
+      <li><strong>stateless compute</strong> pre jadro backendu,</li>
+      <li><strong>stav mimo procesu</strong> v Redis a DynamoDB,</li>
+      <li><strong>loose coupling</strong> cez EventBridge a SQS,</li>
+      <li><strong>idempotent processing</strong> pri retry a duplicitných udalostiach,</li>
+      <li><strong>eventual consistency</strong> tam, kde nie je potrebná silná konzistencia,</li>
+      <li><strong>izolácia kritickej synchronizačnej cesty</strong>.</li>
+    </ul>
+    <h3 id="42-hlavné-komponenty-systému">4.2 Hlavné komponenty systému</h3>
+    <p>Návrh pozostáva z týchto hlavných logických častí:</p>
+    <ul>
+      <li><strong>Web Frontend</strong> – Next.js aplikácia pre používateľov.</li>
+      <li><strong>BFF / REST API</strong> – CRUD operácie, správa miestností a HTTP vstup.</li>
+      <li><strong>Realtime Gateway</strong> – ukončenie WebSocket spojení a distribúcia realtime udalostí.</li>
+      <li><strong>Party Service</strong> – metadáta miestností, pozvánky, členstvo a oprávnenia.</li>
+      <li><strong>Sync Orchestrator</strong> – autoritatívny playback stav a synchronizácia.</li>
+      <li><strong>Chat Service</strong> – chat správy a ich persistencia.</li>
+      <li><strong>Presence Service</strong> – heartbeaty, online používatelia a vypršanie cez TTL.</li>
+      <li><strong>Notification Service</strong> – pozvánky a pripomienky.</li>
+      <li><strong>Analytics Collector</strong> – telemetria, event metriky a prevádzkové merania.</li>
+      <li><strong>Identity layer</strong> – autentifikácia a vydávanie tokenov.</li>
+      <li><strong>Data layer</strong> – perzistentné úložisko a low-latency stav.</li>
+      <li><strong>Observability layer</strong> – logy, metriky, alarmy a dashboardy.</li>
+    </ul>
+    <h3 id="43-dôvod-rozdelenia-na-služby">4.3 Dôvod rozdelenia na služby</h3>
+    <p>Rozdelenie funkcionality nevychádza len z teoretickej predstavy o mikroservisoch, ale z rozdielnych prevádzkových
+      požiadaviek:</p>
+    <ul>
+      <li><strong>Party Service</strong> rieši relatívne malé množstvo CRUD operácií.</li>
+      <li><strong>Sync Orchestrator</strong> musí byť malý, rýchly a autoritatívny.</li>
+      <li><strong>Chat Service</strong> potrebuje zvládať bursty a flood scenáre.</li>
+      <li><strong>Presence Service</strong> pracuje s pravidelnými heartbeat udalosťami.</li>
+      <li><strong>Analytics</strong> a <strong>Notifications</strong> nesmú blokovať kritickú synchronizačnú cestu.</li>
+    </ul>
+    <p>Keby bola celá aplikácia jedna tesne previazaná monolitická časť, vznikol by väčší blast radius. Napríklad
+      preťaženie chatu by mohlo nepriamo ohroziť synchronizáciu prehrávania. Rozdelenie na služby umožňuje:</p>
+    <ul>
+      <li>oddelené škálovanie,</li>
+      <li>jasnejšie zodpovednosti,</li>
+      <li>lepšie monitorovanie jednotlivých tokov,</li>
+      <li>jednoduchšie budúce rozširovanie systému.</li>
+    </ul>
+    <h3 id="44-dôvod-nasadenia-do-cloudu">4.4 Dôvod nasadenia do cloudu</h3>
+    <p>WatchParty je vhodný kandidát na cloud deployment z týchto dôvodov:</p>
+    <ol>
+      <li><strong>Kolísavé zaťaženie</strong> – populárne miestnosti alebo premiéry môžu spôsobiť prudký nárast spojení
+        a udalostí.</li>
+      <li><strong>Realtime charakter</strong> – systém potrebuje využiť managed networking a messaging služby.</li>
+      <li><strong>Distribuovaný stav</strong> – kombinácia durable a low-latency state store je typický cloudový use
+        case.</li>
+      <li><strong>Observability a autoscaling</strong> – cloud platforma poskytuje hotové mechanizmy pre monitoring,
+        alerting a scaling.</li>
+      <li><strong>Rýchle iterovanie</strong> – tím môže stavať na managed services namiesto budovania celej
+        infraštruktúry od nuly.</li>
+    </ol>
+    <h3 id="45-diagram-celkovej-architektúry">4.5 Diagram celkovej architektúry</h3>
+    <div class="mermaid">
+      flowchart LR
+      user[Používateľ]
+      web[Next.js Frontend]
+
+      rest[API Gateway REST]
+      ws[API Gateway WebSocket]
+
+      bff[BFF / REST API]
+      party[Party Service]
+      sync[Sync Orchestrator]
+      realtime[Realtime Gateway]
+      chat[Chat Service]
+      presence[Presence Service]
+      notif[Notification Service]
+      analytics[Analytics Collector]
+
+      cognito[Amazon Cognito]
+      ddb[(Amazon DynamoDB)]
+      redis[(Amazon ElastiCache / Redis)]
+      eb[Amazon EventBridge]
+      sqs[Amazon SQS]
+      cw[Amazon CloudWatch]
+
+      user --> web
+      web --> cognito
+      web --> rest
+      web <--> ws
+
+        rest --> bff
+        bff --> party
+        party --> ddb
+
+        ws --> realtime
+        realtime --> sync
+        realtime --> chat
+        realtime --> presence
+
+        sync --> redis
+        sync --> ddb
+
+        chat --> ddb
+        presence --> redis
+
+        sync --> eb
+        chat --> eb
+        party --> eb
+
+        eb --> sqs
+        sqs --> notif
+        sqs --> analytics
+
+        bff --> cw
+        realtime --> cw
+        sync --> cw
+        chat --> cw
+        presence --> cw
+        notif --> cw
+        analytics --> cw
+
+    </div>
+    <div class="page-break"></div>
+
+    <h2 id="5-komunikácia-a-spracovanie-dát">5. Komunikácia a spracovanie dát</h2>
+    <h3 id="51-rest-komunikácia">5.1 REST komunikácia</h3>
+    <p>REST vrstva je určená pre operácie, ktoré nevyžadujú okamžitý fan-out do celej miestnosti. Typické operácie:</p>
+    <ul>
+      <li>identity check po prihlásení,</li>
+      <li>vytvorenie miestnosti,</li>
+      <li>úprava miestnosti,</li>
+      <li>pripojenie do miestnosti,</li>
+      <li>opustenie miestnosti,</li>
+      <li>správa pozvánok,</li>
+      <li>načítanie metadát miestnosti,</li>
+      <li>načítanie histórie správ,</li>
+      <li>health endpointy.</li>
+    </ul>
+    <p>REST cesta je vhodná pre CRUD operácie, validáciu vstupu a získavanie dát. Je jednoduchšia na verziovanie, audit
+      a testovanie.</p>
+    <h3 id="52-websocket-komunikácia">5.2 WebSocket komunikácia</h3>
+    <p>WebSocket vrstva je určená pre:</p>
+    <ul>
+      <li>realtime playback príkazy,</li>
+      <li>room broadcast,</li>
+      <li>live chat delivery,</li>
+      <li>emoji reakcie,</li>
+      <li>presence heartbeaty,</li>
+      <li>reconnect a resync flow.</li>
+    </ul>
+    <p>WebSocket je vhodný preto, lebo znižuje overhead oproti pollingu a umožňuje obojsmernú komunikáciu s nízkou
+      latenciou.</p>
+    <p>Hlavné realtime udalosti:</p>
+    <ul>
+      <li><code>join_room</code></li>
+      <li><code>leave_room</code></li>
+      <li><code>playback_play</code></li>
+      <li><code>playback_pause</code></li>
+      <li><code>playback_seek</code></li>
+      <li><code>playback_sync</code></li>
+      <li><code>chat_message</code></li>
+      <li><code>reaction</code></li>
+      <li><code>heartbeat</code></li>
+      <li><code>resync_request</code></li>
+      <li><code>resync_snapshot</code></li>
+    </ul>
+    <h3 id="53-messaging-a-asynchrónne-spracovanie">5.3 Messaging a asynchrónne spracovanie</h3>
+    <p>Nie všetko má byť spracované synchronne. Event-driven časť architektúry rieši najmä tieto situácie:</p>
+    <ul>
+      <li>analytics event ingestion,</li>
+      <li>pripomienky,</li>
+      <li>moderation hooks,</li>
+      <li>retry pri notifikáciách,</li>
+      <li>doplnková telemetry pipeline.</li>
+    </ul>
+    <p>Preto je navrhnutý tento model:</p>
+    <ul>
+      <li>hlavné služby publikujú doménové udalosti,</li>
+      <li>udalosti idú cez <strong>EventBridge</strong>,</li>
+      <li>špecializovaní konzumenti ich preberajú priamo alebo cez <strong>SQS</strong>,</li>
+      <li>queue poskytuje buffering, retries a ochranu pred spike loadom.</li>
+    </ul>
+    <p>Tento prístup oddeľuje kritickú synchronizačnú cestu od vedľajších procesov.</p>
+    <h3 id="54-konzistencia-dát-a-rozdelenie-údajov">5.4 Konzistencia dát a rozdelenie údajov</h3>
+    <h4 id="autoritatívny-zdroj-stavu">Autoritatívny zdroj stavu</h4>
+    <p>Pri WatchParty nie je rovnako dôležitá konzistencia v každej časti systému.</p>
+    <ul>
+      <li><strong>Playback stav</strong> musí byť čo najčerstvejší a autoritatívny.</li>
+      <li><strong>Metadáta miestnosti</strong> musia byť perzistentné a spoľahlivo čitateľné.</li>
+      <li><strong>História chatu</strong> môže tolerovať krátku eventual consistency.</li>
+      <li><strong>Telemetria</strong> je čisto asynchrónna.</li>
+    </ul>
+    <p>Navrhovaný model je:</p>
+    <ul>
+      <li><strong>Redis</strong> = autoritatívny aktuálny playback stav miestnosti, presence a sekvencia udalostí,</li>
+      <li><strong>DynamoDB</strong> = perzistentné metadáta miestností, členstvo, pozvánky, snapshoty a správy,</li>
+      <li><strong>EventBridge / SQS</strong> = eventual processing pre doplnkové toky.</li>
+    </ul>
+    <h4 id="rozdelenie-údajov">Rozdelenie údajov</h4>
+    <p>Zadanie odporúča rozdelenie dát namiesto jednej centrálnej SQL databázy. V návrhu WatchParty sú dáta prirodzene
+      rozdelené podľa <code>roomId</code>.</p>
+    <p>Príklady logického rozdelenia:</p>
+    <ul>
+      <li>Redis kľúč <code>room:{roomId}:playback</code></li>
+      <li>Redis kľúč <code>room:{roomId}:presence</code></li>
+      <li>Redis kľúč <code>room:{roomId}:last-sequence</code></li>
+      <li>DynamoDB partition <code>ROOM#{roomId}</code></li>
+      <li>chat správy rozdelené podľa miestnosti a času</li>
+    </ul>
+    <p>Tento prístup prináša:</p>
+    <ul>
+      <li>prirodzenú izoláciu medzi miestnosťami,</li>
+      <li>jednoduchší horizontálny rast,</li>
+      <li>menej kolízií medzi nezávislými miestnosťami,</li>
+      <li>vhodný model pre eventual consistency v nekritických častiach.</li>
+    </ul>
+    <h4 id="konzistenčný-model">Konzistenčný model</h4>
+    <ul>
+      <li><strong>Autoritatívna konzistencia</strong> je potrebná pre aktuálny playback stav miestnosti.</li>
+      <li><strong>Eventual consistency</strong> je akceptovateľná pri analytike, notifikáciách a časti čítania histórie
+        chatu.</li>
+      <li><strong>Idempotencia</strong> je povinná pre retry a duplicitné udalosti.</li>
+      <li>Každá playback udalosť preto obsahuje:<ul>
+          <li><code>eventId</code>,</li>
+          <li><code>roomId</code>,</li>
+          <li><code>userId</code>,</li>
+          <li><code>type</code>,</li>
+          <li><code>sequence</code>,</li>
+          <li><code>timestamp</code>,</li>
+          <li><code>payload</code>.</li>
+        </ul>
+      </li>
+    </ul>
+    <h3 id="55-sekvenčný-diagram-synchronizácie">5.5 Sekvenčný diagram synchronizácie</h3>
+    <div class="mermaid">
+      sequenceDiagram
+      autonumber
+      participant H as Hostiteľ
+      participant WS as API Gateway WebSocket
+      participant RT as Realtime Gateway
+      participant SO as Sync Orchestrator
+      participant R as Redis
+      participant V1 as Divák A
+      participant V2 as Divák B
+
+      H->>WS: playback_pause(roomId, position, eventId, sequence?)
+      WS->>RT: WebSocket udalosť
+      RT->>SO: validácia hostiteľa a odovzdanie príkazu
+      SO->>R: porovnanie a uloženie autoritatívneho stavu
+      R-->>SO: stav uložený
+      SO-->>RT: playback_sync(roomId, position, sequence, timestamp)
+      RT-->>WS: broadcast do miestnosti
+      WS-->>V1: playback_sync(...)
+      WS-->>V2: playback_sync(...)
+      V1->>V1: lokálna korekcia
+      V2->>V2: lokálna korekcia
+
+    </div>
+    <div class="page-break"></div>
+
+    <h2 id="6-návrh-backendu">6. Návrh backendu</h2>
+    <h3 id="61-prehľad-backend-služieb">6.1 Prehľad backend služieb</h3>
+    <h4 id="611-auth-service">6.1.1 Auth Service</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>integrácia s identity providerom,</li>
+      <li>validácia JWT,</li>
+      <li>ochrana REST a WebSocket vstupných bodov.</li>
+    </ul>
+    <h4 id="612-party-service">6.1.2 Party Service</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>vytvorenie miestnosti,</li>
+      <li>metadáta miestnosti,</li>
+      <li>logika pripojenia a odpojenia,</li>
+      <li>priradenie hostiteľa,</li>
+      <li>generovanie pozvánok,</li>
+      <li>oprávnenia v miestnosti.</li>
+    </ul>
+    <h4 id="613-sync-orchestrator">6.1.3 Sync Orchestrator</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>autoritatívny playback stav,</li>
+      <li>korekcia driftu,</li>
+      <li>sekvencovanie udalostí,</li>
+      <li>resync snapshot,</li>
+      <li>kontrola, či príkaz prišiel od hostiteľa.</li>
+    </ul>
+    <h4 id="614-realtime-gateway">6.1.4 Realtime Gateway</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>správa WebSocket spojení,</li>
+      <li>odosielanie udalostí do miestnosti,</li>
+      <li>routovanie realtime udalostí do správnych služieb.</li>
+    </ul>
+    <h4 id="615-presence-service">6.1.5 Presence Service</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>prijímanie heartbeatov,</li>
+      <li>online/offline stav,</li>
+      <li>vypršanie cez TTL,</li>
+      <li>publikovanie presence aktualizácií.</li>
+    </ul>
+    <h4 id="616-chat-service">6.1.6 Chat Service</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>prijímanie a persistencia chat správ,</li>
+      <li>distribúcia správ,</li>
+      <li>možná moderácia,</li>
+      <li>izolácia chat špičiek od synchronizačnej cesty.</li>
+    </ul>
+    <h4 id="617-notification-service">6.1.7 Notification Service</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>notifikácie k pozvánkam,</li>
+      <li>pripomienky na scheduled parties,</li>
+      <li>asynchrónne workflow cez queue a event bus.</li>
+    </ul>
+    <h4 id="618-analytics-collector">6.1.8 Analytics Collector</h4>
+    <p>Zodpovednosť:</p>
+    <ul>
+      <li>telemetria,</li>
+      <li>sledovanie latencie,</li>
+      <li>reconnect rate,</li>
+      <li>message throughput,</li>
+      <li>prevádzkové dashboardy.</li>
+    </ul>
+    <h3 id="62-návrh-api">6.2 Návrh API</h3>
+    <h4 id="rest-endpointy">REST endpointy</h4>
+    <pre><code class="language-http">GET    /api/auth/me
+
+POST   /api/rooms
+GET    /api/rooms
+GET    /api/rooms/:roomId
+PATCH  /api/rooms/:roomId
+DELETE /api/rooms/:roomId
+
+POST   /api/rooms/:roomId/join
+POST   /api/rooms/:roomId/leave
+POST   /api/rooms/:roomId/invites
+GET    /api/rooms/:roomId/messages
+
+POST   /api/scheduled-parties
+GET    /api/health
+GET    /api/health/ready
+</code></pre>
+    <h4 id="príklad-vytvorenia-miestnosti">Príklad vytvorenia miestnosti</h4>
+    <p><strong>Request</strong></p>
+    <pre><code class="language-json">{
+  &quot;title&quot;: &quot;Friday Night Cinema&quot;,
+  &quot;videoUrl&quot;: &quot;https://www.youtube.com/watch?v=aqz-KE-bpKQ&quot;,
+  &quot;isPrivate&quot;: true,
+  &quot;password&quot;: &quot;watchparty123&quot;
+}
+</code></pre>
+    <p><strong>Response</strong></p>
+    <pre><code class="language-json">{
+  &quot;roomId&quot;: &quot;a1b2c3d4e5f6a7b8&quot;,
+  &quot;title&quot;: &quot;Friday Night Cinema&quot;,
+  &quot;videoUrl&quot;: &quot;https://www.youtube.com/watch?v=aqz-KE-bpKQ&quot;,
+  &quot;isPrivate&quot;: true,
+  &quot;hostUserId&quot;: &quot;user_123&quot;,
+  &quot;memberCount&quot;: 1,
+  &quot;status&quot;: &quot;active&quot;,
+  &quot;createdAt&quot;: &quot;2026-03-30T18:00:00.000Z&quot;
+}
+</code></pre>
+    <h3 id="63-návrh-udalostí-v-realtime-vrstve">6.3 Návrh udalostí v realtime vrstve</h3>
+    <h4 id="základný-event-envelope">Základný event envelope</h4>
+    <pre><code class="language-json">{
+  &quot;eventId&quot;: &quot;uuid&quot;,
+  &quot;roomId&quot;: &quot;room_123&quot;,
+  &quot;userId&quot;: &quot;user_456&quot;,
+  &quot;type&quot;: &quot;playback_pause&quot;,
+  &quot;sequence&quot;: 42,
+  &quot;timestamp&quot;: &quot;2026-03-30T18:01:23.000Z&quot;,
+  &quot;payload&quot;: {}
+}
+</code></pre>
+    <h4 id="udalosti-od-klienta-na-server">Udalosti od klienta na server</h4>
+    <pre><code class="language-text">join_room
+leave_room
+playback_play
+playback_pause
+playback_seek
+chat_message
+reaction
+heartbeat
+resync_request
+</code></pre>
+    <h4 id="udalosti-od-servera-ku-klientovi">Udalosti od servera ku klientovi</h4>
+    <pre><code class="language-text">room_joined
+room_left
+playback_sync
+chat_message_created
+reaction_broadcast
+presence_updated
+resync_snapshot
+error
+</code></pre>
+    <h3 id="64-dátový-model">6.4 Dátový model</h3>
+    <h4 id="hlavné-entity">Hlavné entity</h4>
+    <ul>
+      <li><code>User</code></li>
+      <li><code>Room</code></li>
+      <li><code>RoomMember</code></li>
+      <li><code>Invite</code></li>
+      <li><code>PlaybackState</code></li>
+      <li><code>Message</code></li>
+      <li><code>Reaction</code></li>
+      <li><code>ScheduledParty</code></li>
+      <li><code>TelemetryEvent</code></li>
+    </ul>
+    <h4 id="diagram-dátového-modelu">Diagram dátového modelu</h4>
+    <div class="mermaid">
+      erDiagram
+      USER ||--o{ ROOM : creates
+      ROOM ||--o{ ROOM_MEMBER : contains
+      USER ||--o{ ROOM_MEMBER : joins
+      ROOM ||--o{ INVITE : has
+      ROOM ||--o{ MESSAGE : stores
+      USER ||--o{ MESSAGE : sends
+      ROOM ||--|| PLAYBACK_STATE : has
+      ROOM ||--o{ REACTION : receives
+      USER ||--o{ REACTION : sends
+      ROOM ||--o{ SCHEDULED_PARTY : can_have
+
+      USER {
+      string userId PK
+      string username
+      string email
+      string createdAt
+      }
+
+      ROOM {
+      string roomId PK
+      string title
+      string videoUrl
+      boolean isPrivate
+      string hostUserId
+      string status
+      string createdAt
+      }
+
+      ROOM_MEMBER {
+      string roomId PK
+      string userId PK
+      string role
+      string joinedAt
+      }
+
+      INVITE {
+      string roomId PK
+      string inviteCode PK
+      string createdBy
+      string createdAt
+      string expiresAt
+      }
+
+      MESSAGE {
+      string roomId PK
+      string messageId PK
+      string userId
+      string body
+      string createdAt
+      }
+
+      PLAYBACK_STATE {
+      string roomId PK
+      string playbackStatus
+      number positionSeconds
+      number sequence
+      string updatedAt
+      }
+
+      REACTION {
+      string roomId PK
+      string reactionId PK
+      string userId
+      string emoji
+      string createdAt
+      }
+
+      SCHEDULED_PARTY {
+      string scheduledPartyId PK
+      string roomId
+      string startsAt
+      string createdBy
+      }
+
+    </div>
+    <h4 id="návrh-uloženia-do-dynamodb">Návrh uloženia do DynamoDB</h4>
+    <p>Jednoduchá a praktická možnosť je použiť single-table alebo logical-table prístup. V tomto návrhu sa odporúča
+      partitioning podľa miestnosti:</p>
+    <ul>
+      <li><code>PK = ROOM#{roomId}</code></li>
+      <li><code>SK = META</code></li>
+      <li><code>SK = MEMBER#{userId}</code></li>
+      <li><code>SK = INVITE#{inviteCode}</code></li>
+      <li><code>SK = MESSAGE#{timestamp}#{messageId}</code></li>
+    </ul>
+    <p>Výhody:</p>
+    <ul>
+      <li>room-centric access patterns,</li>
+      <li>jednoduché načítanie metadát miestnosti a jej členov,</li>
+      <li>prirodzené zhlukovanie údajov patriacich jednej miestnosti,</li>
+      <li>vhodné pre horizontálnu distribúciu.</li>
+    </ul>
+    <h4 id="návrh-uloženia-do-redis">Návrh uloženia do Redis</h4>
+    <ul>
+      <li><code>room:{roomId}:playback</code></li>
+      <li><code>room:{roomId}:presence</code></li>
+      <li><code>room:{roomId}:last-sequence</code></li>
+      <li><code>room:{roomId}:host</code></li>
+      <li><code>room:{roomId}:reactions</code></li>
+    </ul>
+    <p>Redis je vhodný na údaje s vysokou zmenovosťou a nízkou toleranciou latencie.</p>
+    <h3 id="65-pseudokód-pre-sync-orchestrator">6.5 Pseudokód pre Sync Orchestrator</h3>
+    <pre><code class="language-text">function handlePlaybackCommand(event):
+    validateJwt(event.user)
+    room = loadRoomMetadata(event.roomId)
+    if room.hostUserId != event.userId:
+        reject(&quot;only host can control playback&quot;)
+
+    currentState = redis.get(room.playbackStateKey)
+
+    if event.sequence &lt;= currentState.sequence:
+        ignoreDuplicateOrOutOfOrder(event)
+        return
+
+    nextState = applyPlaybackTransition(currentState, event)
+
+    redis.set(room.playbackStateKey, nextState)
+    redis.set(room.lastSequenceKey, nextState.sequence)
+
+    if shouldPersistSnapshot(nextState):
+        dynamodb.savePlaybackSnapshot(room.roomId, nextState)
+
+    broadcastToRoom(&quot;playback_sync&quot;, nextState)
+    publishDomainEvent(&quot;PlaybackChanged&quot;, nextState)
+</code></pre>
+    <div class="page-break"></div>
+
+    <h2 id="7-návrh-frontendu">7. Návrh frontendu</h2>
+    <h3 id="71-typ-frontendu-a-hlavné-obrazovky">7.1 Typ frontendu a hlavné obrazovky</h3>
+    <p>Frontend je navrhnutý ako <strong>webová aplikácia</strong> postavená na <strong>Next.js</strong>. Tento prístup
+      je vhodný, pretože:</p>
+    <ul>
+      <li>aplikácia je dostupná cez prehliadač bez inštalácie,</li>
+      <li>je vhodná pre rýchle iterovanie používateľského rozhrania,</li>
+      <li>dobre sa integruje s auth flow,</li>
+      <li>umožňuje moderný interaktívny používateľský zážitok.</li>
+    </ul>
+    <p>Hlavné obrazovky:</p>
+    <ol>
+      <li><strong>Landing page</strong> – predstavenie produktu a vstup do login flow.</li>
+      <li><strong>Login / callback flow</strong> – presmerovanie na identity provider a návrat do aplikácie.</li>
+      <li><strong>Hub / dashboard</strong> – prehľad miestností a vytvorenie novej miestnosti.</li>
+      <li><strong>Room detail</strong> – hlavná watch stránka s prehrávaním, chatom, reakciami a presence.</li>
+      <li><strong>Join room page</strong> – vstup do private room, validácia invite alebo hesla.</li>
+      <li><strong>Settings / user menu</strong> – základné používateľské nastavenia.</li>
+    </ol>
+    <h3 id="72-používateľské-scenáre">7.2 Používateľské scenáre</h3>
+    <h4 id="scenár-a-hostiteľ-vytvorí-novú-miestnosť">Scenár A – hostiteľ vytvorí novú miestnosť</h4>
+    <ul>
+      <li>používateľ sa prihlási,</li>
+      <li>v hub sekcii zvolí vytvorenie novej miestnosti,</li>
+      <li>zadá názov, video URL a prípadne súkromný prístup,</li>
+      <li>po vytvorení je presmerovaný do miestnosti,</li>
+      <li>môže vytvoriť pozývací odkaz a počkať na ďalších účastníkov.</li>
+    </ul>
+    <h4 id="scenár-b-divák-sa-pripojí-do-miestnosti">Scenár B – divák sa pripojí do miestnosti</h4>
+    <ul>
+      <li>divák otvorí pozývací odkaz,</li>
+      <li>systém overí prístup do miestnosti,</li>
+      <li>frontend zavolá endpoint na pripojenie,</li>
+      <li>po úspešnom vstupe sa vytvorí WebSocket session,</li>
+      <li>divák dostane aktuálny stav miestnosti a môže sledovať video.</li>
+    </ul>
+    <h4 id="scenár-c-reakcia-na-playback-udalosť">Scenár C – reakcia na playback udalosť</h4>
+    <ul>
+      <li>hostiteľ klikne <code>pause</code>,</li>
+      <li>frontend hostiteľa odošle realtime udalosť,</li>
+      <li>frontend diváka dostane <code>playback_sync</code>,</li>
+      <li>klient upraví stav prehrávača a zobrazí nový stav.</li>
+    </ul>
+    <h4 id="scenár-d-reconnect">Scenár D – reconnect</h4>
+    <ul>
+      <li>WebSocket spojenie sa preruší,</li>
+      <li>frontend zobrazí stav reconnect,</li>
+      <li>po obnove spojenia pošle <code>resync_request</code>,</li>
+      <li>dostane snapshot a prehrávanie dorovná.</li>
+    </ul>
+    <h3 id="73-komunikácia-frontend-backend-cez-api-gateway">7.3 Komunikácia frontend–backend cez API Gateway</h3>
+    <p>Frontend komunikuje s backendom dvoma cestami:</p>
+    <h4 id="cesta-1-rest">Cesta 1 – REST</h4>
+    <p>Používa sa pre:</p>
+    <ul>
+      <li>identity check po prihlásení,</li>
+      <li>CRUD operácie nad miestnosťami,</li>
+      <li>pozvánky,</li>
+      <li>metadáta,</li>
+      <li>históriu.</li>
+    </ul>
+    <h4 id="cesta-2-websocket">Cesta 2 – WebSocket</h4>
+    <p>Používa sa pre:</p>
+    <ul>
+      <li>synchronizačné príkazy,</li>
+      <li>realtime fan-out do miestnosti,</li>
+      <li>reakcie,</li>
+      <li>heartbeaty,</li>
+      <li>reconnect a resync.</li>
+    </ul>
+    <p>Toto oddelenie je zámerné, pretože HTTP a realtime traffic majú iné charakteristiky, iné metriky aj iný failure
+      profile.</p>
+    <div class="page-break"></div>
+
+    <h2 id="8-použité-cloud-technológie-a-služby">8. Použité cloud technológie a služby</h2>
+    <h3 id="81-vybraná-platforma">8.1 Vybraná platforma</h3>
+    <p>Ako hlavná cloud platforma je zvolená <strong>AWS</strong>. Dôvody:</p>
+    <ul>
+      <li>kvalitná podpora pre managed identity, API a messaging,</li>
+      <li>natívna podpora WebSocket API Gateway,</li>
+      <li>vhodná kombinácia <strong>DynamoDB + Redis</strong> pre tento use case,</li>
+      <li>event-driven služby pre asynchrónne workflow,</li>
+      <li>dobrá observability vrstva.</li>
+    </ul>
+    <p>Frontend je umiestnený na <strong>Vercel</strong>, čo je vhodné pre Next.js deployment. Riešenie je teda z
+      pohľadu prevádzky hybridné:</p>
+    <ul>
+      <li>frontend hosting: Vercel,</li>
+      <li>backend a realtime časť: AWS.</li>
+    </ul>
+    <h3 id="82-použité-aws-služby">8.2 Použité AWS služby</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Oblasť</th>
+          <th>Služba</th>
+          <th>Účel</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Authentication</td>
+          <td>Amazon Cognito</td>
+          <td>prihlásenie používateľa, tokeny, validácia JWT</td>
+        </tr>
+        <tr>
+          <td>HTTP API</td>
+          <td>Amazon API Gateway REST</td>
+          <td>CRUD operácie, metadáta, pozvánky, health</td>
+        </tr>
+        <tr>
+          <td>Realtime API</td>
+          <td>Amazon API Gateway WebSocket</td>
+          <td>realtime komunikácia v miestnostiach</td>
+        </tr>
+        <tr>
+          <td>Compute</td>
+          <td>Amazon ECS Fargate</td>
+          <td>kontajnerové backend služby</td>
+        </tr>
+        <tr>
+          <td>Perzistentné dáta</td>
+          <td>Amazon DynamoDB</td>
+          <td>metadáta miestností, členovia, správy, snapshoty</td>
+        </tr>
+        <tr>
+          <td>Rýchlo sa meniaci stav</td>
+          <td>Amazon ElastiCache for Redis</td>
+          <td>playback stav, presence, sekvencie udalostí</td>
+        </tr>
+        <tr>
+          <td>Event bus</td>
+          <td>Amazon EventBridge</td>
+          <td>doménové udalosti</td>
+        </tr>
+        <tr>
+          <td>Queueing</td>
+          <td>Amazon SQS</td>
+          <td>buffering a retries</td>
+        </tr>
+        <tr>
+          <td>Monitoring</td>
+          <td>Amazon CloudWatch</td>
+          <td>logy, metriky, alarmy</td>
+        </tr>
+        <tr>
+          <td>Protection</td>
+          <td>AWS WAF</td>
+          <td>ochrana verejných endpointov</td>
+        </tr>
+        <tr>
+          <td>Optional object storage</td>
+          <td>Amazon S3</td>
+          <td>exporty, assety, archívne dáta</td>
+        </tr>
+        <tr>
+          <td>Optional CDN</td>
+          <td>Amazon CloudFront</td>
+          <td>voliteľná podpora statického obsahu</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3 id="83-kontajnery-serverless-a-služby-tretích-strán">8.3 Kontajnery, serverless a služby tretích strán</h3>
+    <h4 id="kontajnery">Kontajnery</h4>
+    <p>Jadro backendu je navrhnuté ako kontajnerizovaný systém. To sa hodí najmä pre:</p>
+    <ul>
+      <li>Party Service,</li>
+      <li>Sync Orchestrator,</li>
+      <li>Realtime Gateway,</li>
+      <li>Chat Service,</li>
+      <li>Presence Service.</li>
+    </ul>
+    <p>Kontajnery sú vhodné, pretože ponúkajú kontrolu nad runtime prostredím a dajú sa jednoducho škálovať vo Fargate.
+    </p>
+    <h4 id="serverless-časti">Serverless časti</h4>
+    <p>Pre niektoré ľahké doplnkové časti je vhodné zvážiť serverless prístup, napríklad:</p>
+    <ul>
+      <li>Reminder Worker,</li>
+      <li>Invite Notification Worker,</li>
+      <li>jednoduché analytics processory.</li>
+    </ul>
+    <p>Tieto časti môžu byť spúšťané EventBridge alebo SQS triggerom a nemusia byť súčasťou hlavného kontajnerového
+      backendu.</p>
+    <h4 id="služby-tretích-strán">Služby tretích strán</h4>
+    <p>Najdôležitejšou službou tretej strany v návrhu je identity provider. V aktuálnej variante je ním Cognito Hosted
+      UI. Do budúcna je možné doplniť aj social login providery, ak to rozsah projektu dovolí.</p>
+    <div class="page-break"></div>
+
+    <h2 id="9-dopad-nasadenia-do-cloudu">9. Dopad nasadenia do cloudu</h2>
+    <h3 id="91-škálovanie-a-elasticita">9.1 Škálovanie a elasticita</h3>
+    <p>Cloud deployment umožňuje riešiť dva rozdielne typy zaťaženia:</p>
+    <ul>
+      <li><strong>pomalšie, ale trvalé zaťaženie</strong> – CRUD operácie nad miestnosťami a metadátami,</li>
+      <li><strong>krátke a intenzívne špičky</strong> – reakcie, chat burst, hromadné reconnecty.</li>
+    </ul>
+    <p>Elasticita sa rieši takto:</p>
+    <ul>
+      <li>frontend sa škáluje nezávisle od backendu,</li>
+      <li>HTTP a WebSocket vstup majú oddelené cesty,</li>
+      <li>Fargate služby sa môžu škálovať podľa CPU, memory alebo queue depth,</li>
+      <li>asynchrónni workeri sa škálujú podľa backlogu v SQS,</li>
+      <li>dáta sú rozdelené per-room, čo zjednodušuje horizontálny rast.</li>
+    </ul>
+    <h3 id="92-dostupnosť-a-liveness">9.2 Dostupnosť a liveness</h3>
+    <p>Systém musí vedieť prežiť bežné prevádzkové zlyhania:</p>
+    <ul>
+      <li>reštart kontajnera,</li>
+      <li>dočasný výpadok WebSocket session,</li>
+      <li>oneskorenie analytics consumera,</li>
+      <li>krátkodobú špičku v chate.</li>
+    </ul>
+    <p>Na to sú navrhnuté tieto mechanizmy:</p>
+    <ul>
+      <li>stateless backend procesy,</li>
+      <li>stav miestnosti mimo procesu,</li>
+      <li>health endpointy,</li>
+      <li>ECS health checks a automatický reštart,</li>
+      <li>TTL-based vypršanie prítomnosti,</li>
+      <li>reconnect + resync flow,</li>
+      <li>oddelenie kritickej synchronizačnej cesty od nekritických workflow.</li>
+    </ul>
+    <h3 id="93-bezpečnosť-a-monitoring">9.3 Bezpečnosť a monitoring</h3>
+    <h4 id="bezpečnosť">Bezpečnosť</h4>
+    <ul>
+      <li>autentifikácia cez centrálnu identity vrstvu,</li>
+      <li>ochrana REST aj WebSocket vrstvy,</li>
+      <li>host-only autorizácia pri playback ovládaní,</li>
+      <li>pravidlá vstupu do private rooms,</li>
+      <li>least-privilege prístup medzi službami,</li>
+      <li>WAF pre verejné API vrstvy,</li>
+      <li>tajomstvá mimo source code.</li>
+    </ul>
+    <h4 id="monitoring">Monitoring</h4>
+    <p>Systém má zbierať aspoň tieto metriky:</p>
+    <ul>
+      <li>počet aktívnych miestností,</li>
+      <li>počet WebSocket connections,</li>
+      <li>p95 latenciu playback udalostí,</li>
+      <li>reconnect rate,</li>
+      <li>message throughput,</li>
+      <li>error rate na REST API,</li>
+      <li>queue backlog,</li>
+      <li>počet reštartov backend taskov.</li>
+    </ul>
+    <p>Tieto metriky pomôžu pri demonštrácii aj pri reálnej prevádzke.</p>
+    <h3 id="94-riziká-a-obmedzenia">9.4 Riziká a obmedzenia</h3>
+    <p>Navrhované riešenie prináša viacero výhod, ale aj určité riziká:</p>
+    <ul>
+      <li>vyššia architektonická zložitosť oproti jednoduchému monolitu,</li>
+      <li>potreba správne riešiť poradie a duplicitu realtime udalostí,</li>
+      <li>citlivosť používateľského zážitku na sieťové oneskorenie,</li>
+      <li>možné náklady na cloud služby pri väčšej záťaži,</li>
+      <li>potreba dôsledného monitoringu a ladenia reconnect scenárov.</li>
+    </ul>
+    <p>Tieto riziká sú však primerané typu aplikácie a dajú sa obmedziť správnym návrhom architektúry, idempotenciou a
+      oddelením kritických a nekritických tokov.</p>
+    <div class="page-break"></div>
+
+    <h2 id="10-záver">10. Záver</h2>
+    <p>WatchParty je návrh cloudovej aplikácie, ktorá kombinuje správu miestností, realtime synchronizáciu prehrávania,
+      live chat, reakcie a podporu reconnect scenárov. Najdôležitejšou časťou riešenia je oddelenie kritickej
+      synchronizačnej cesty od ostatných častí systému, aby prehrávanie ostalo rýchle a spoľahlivé aj pri vyššej záťaži.
+    </p>
+    <p>Navrhovaná architektúra využíva rozumné rozdelenie na služby, cloudové managed services a kombináciu
+      perzistentného aj nízkolatenčného úložiska. Takýto návrh zodpovedá požiadavkám predmetu Cloud Systems a zároveň
+      dáva zmysel aj ako realistický základ pre ďalšiu implementáciu a prezentáciu projektu WatchParty.</p>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'neutral',
+        securityLevel: 'loose',
+        flowchart: { useMaxWidth: true, htmlLabels: true },
+        er: { useMaxWidth: true },
+        sequence: { useMaxWidth: true }
+      });
+    }
+  </script>
+</body>
+
+</html>
