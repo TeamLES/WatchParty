@@ -1,13 +1,25 @@
-# WatchParty
-## Špecifikácia a návrh cloudovej aplikácie pre predmet **Cloud Systems**
+<div class="cover-page">
+  <div class="cover-kicker">Cloud Systems · Phase #2 · Specification and Design</div>
+  <h1 class="cover-title">WatchParty</h1>
+  <p class="cover-subtitle">Špecifikácia a návrh cloudovej aplikácie</p>
 
-**Tím:** Lukáš Čeč, Matej Bendík, Miroslav Hanisko, Oliver Fecko, Benjamín Vateha  
-**Akademický rok:** 2025/2026  
-**Predmet:** Cloud Systems  
+  <div class="cover-meta">
+    <div><span class="meta-label">Tím</span><span class="meta-value">Lukáš Čeč, Matej Bendík, Miroslav Hanisko, Oliver Fecko, Benjamín Vateha</span></div>
+    <div><span class="meta-label">Akademický rok</span><span class="meta-value">2025/2026</span></div>
+    <div><span class="meta-label">Predmet</span><span class="meta-value">Cloud Systems</span></div>
+    <div><span class="meta-label">Typ dokumentu</span><span class="meta-value">Špecifikácia a návrh systému</span></div>
+  </div>
 
-> Tento dokument opisuje **cieľový návrh** systému **WatchParty**.
+  <p class="cover-note">
+    Tento dokument opisuje cieľový návrh systému <strong>WatchParty</strong>.
+  </p>
+</div>
 
----
+<div class="page-break"></div>
+
+<div class="toc-page">
+
+<div class="page-break"></div>
 
 ## Obsah
 
@@ -54,8 +66,9 @@
   - [9.3 Bezpečnosť a monitoring](#93-bezpečnosť-a-monitoring)
   - [9.4 Riziká a obmedzenia](#94-riziká-a-obmedzenia)
 - [10. Záver](#10-záver)
+</div>
 
----
+<div class="page-break"></div>
 
 ## 1. Úvod
 
@@ -68,6 +81,8 @@ Hlavným problémom, ktorý aplikácia rieši, je spojenie troch náročných vl
 3. **schopnosť zvládnuť kolísavé zaťaženie a výpadky spojenia**.  
 
 Tento dokument opisuje návrh systému, jeho funkčné aj nefunkčné požiadavky, rozdelenie funkcionality do služieb, návrh API, dátový model a využitie cloudových služieb. Dokument je pripravený ako Phase 2 odovzdávka pre predmet **Cloud Systems** a zameriava sa na **špecifikáciu a návrh**, nie na detailný opis aktuálneho prototypu.
+
+<div class="page-break"></div>
 
 ## 2. Prehľad projektu WatchParty
 
@@ -122,6 +137,8 @@ Aby bol systém implementovateľný v rámci študentského projektu a zároveň
 - rozšírený analytics dashboard.
 
 Toto rozdelenie je dôležité aj z architektonického hľadiska. Hlavná synchronizačná cesta musí fungovať samostatne a nesmie byť závislá od neskorších rozšírení, ktoré sa na ňu pripájajú asynchrónne.
+
+<div class="page-break"></div>
 
 ## 3. Analýza požiadaviek
 
@@ -297,6 +314,8 @@ Izolácia je riešená takto:
 
 Takto sa zabráni miešaniu stavu medzi miestnosťami a systém vie prirodzene škálovať podľa ich počtu.
 
+<div class="page-break"></div>
+
 ## 4. Návrh architektúry systému
 
 ### 4.1 Architektonický štýl
@@ -425,6 +444,8 @@ flowchart LR
     notif --> cw
     analytics --> cw
 ```
+
+<div class="page-break"></div>
 
 ## 5. Komunikácia a spracovanie dát
 
@@ -565,6 +586,8 @@ sequenceDiagram
     V1->>V1: lokálna korekcia
     V2->>V2: lokálna korekcia
 ```
+
+<div class="page-break"></div>
 
 ## 6. Návrh backendu
 
@@ -865,6 +888,8 @@ function handlePlaybackCommand(event):
     publishDomainEvent("PlaybackChanged", nextState)
 ```
 
+<div class="page-break"></div>
+
 ## 7. Návrh frontendu
 
 ### 7.1 Typ frontendu a hlavné obrazovky
@@ -939,6 +964,8 @@ Používa sa pre:
 
 Toto oddelenie je zámerné, pretože HTTP a realtime traffic majú iné charakteristiky, iné metriky aj iný failure profile.
 
+<div class="page-break"></div>
+
 ## 8. Použité cloud technológie a služby
 
 ### 8.1 Vybraná platforma
@@ -997,6 +1024,8 @@ Tieto časti môžu byť spúšťané EventBridge alebo SQS triggerom a nemusia 
 
 #### Služby tretích strán
 Najdôležitejšou službou tretej strany v návrhu je identity provider. V aktuálnej variante je ním Cognito Hosted UI. Do budúcna je možné doplniť aj social login providery, ak to rozsah projektu dovolí.
+
+<div class="page-break"></div>
 
 ## 9. Dopad nasadenia do cloudu
 
@@ -1072,6 +1101,8 @@ Navrhované riešenie prináša viacero výhod, ale aj určité riziká:
 - potreba dôsledného monitoringu a ladenia reconnect scenárov.
 
 Tieto riziká sú však primerané typu aplikácie a dajú sa obmedziť správnym návrhom architektúry, idempotenciou a oddelením kritických a nekritických tokov.
+
+<div class="page-break"></div>
 
 ## 10. Záver
 
