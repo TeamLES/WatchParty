@@ -87,6 +87,11 @@ export default function HubPage() {
       }
 
       const data = await res.json();
+
+      if (isPrivate) {
+        sessionStorage.setItem(`unlocked_room_${data.roomId}`, "true");
+      }
+
       router.push(`/room/${data.roomId}`);
     } catch (error) {
       console.error("Failed to create room", error);

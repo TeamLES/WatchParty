@@ -225,6 +225,23 @@ export class RoomsController {
     return this.roomsService.joinRoom(params.roomId, userId, joinRoomDto);
   }
 
+  @Post(':roomId/leave')
+  @ApiOperation({ summary: 'Leave room' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiOkResponse({ description: 'Left room successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid roomId' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({ description: 'Host cannot leave the room' })
+  @ApiNotFoundResponse({ description: 'Room not found' })
+  async leaveRoom(
+    @Param() params: RoomIdParamDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<{ message: string }> {
+    const userId = this.getRequiredUserSub(user);
+    await this.roomsService.leaveRoom(params.roomId, userId);
+    return { message: 'Left room successfully' };
+  }
+
   @Post(':roomId/invites')
   @ApiOperation({ summary: 'Create invite code for a room (host only)' })
   @ApiParam({ name: 'roomId', type: String })

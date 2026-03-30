@@ -2,11 +2,11 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
 import {
   DynamoDBDocumentClient,
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
   ScanCommand,
-  DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   Injectable,
@@ -323,6 +323,30 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
 
     return fromRoomMemberItem(asRecord(response.Item));
+  }
+
+  async removeMember(roomId: string, userId: string): Promise<void> {
+    this.logger.log(`removeMember roomId=${roomId} userId=${userId}`);
+    const pk = buildRoomPk(roomId);
+    const sk = buildMemberSk(userId);
+
+    const command = new DeleteCommand({
+      TableName: this.tableName,
+      Key: {
+        PK: pk,
+        SK: sk,
+      },
+    });
+
+    try {
+      await this.documentClient.send(command);
+    } catch (error) {
+      this.logger.error(
+        `removeMember failed roomId=${roomId} userId=${userId}`,
+        error,
+      );
+      throw new InternalServerErrorException('Failed to remove member');
+    }
   }
 
   async getMembersByRoomId(roomId: string): Promise<RoomMember[]> {

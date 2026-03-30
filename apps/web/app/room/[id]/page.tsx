@@ -77,6 +77,19 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         console.log("Room INFO (vrátené z API):", data);
         console.log("Video URL tejto roomky:", data.videoUrl);
 
+        if (!data.isMember) {
+          router.replace(`/room/join/${roomId}`);
+          return;
+        }
+
+        if (data.isPrivate) {
+          const isUnlocked = sessionStorage.getItem(`unlocked_room_${roomId}`);
+          if (!isUnlocked) {
+            router.replace(`/room/join/${roomId}`);
+            return;
+          }
+        }
+
         setRoom({
           id: data.roomId,
           title: data.title,

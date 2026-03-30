@@ -19,6 +19,7 @@ export interface RoomsRepository {
 
   addMember(member: RoomMember): Promise<RoomMember>;
   getMember(roomId: string, userId: string): Promise<RoomMember | null>;
+  removeMember(roomId: string, userId: string): Promise<void>;
 
   // Members lookup must stay in the room partition (PK=ROOM#<roomId>).
   getMembersByRoomId(roomId: string): Promise<RoomMember[]>;

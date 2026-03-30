@@ -104,10 +104,22 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return this.cloneMember(member);
   }
 
-  async getMember(roomId: string, userId: string): Promise<RoomMember | null> {
+  async getMember(
+    roomId: string,
+    userId: string,
+  ): Promise<RoomMember | null> {
+    this.logger.log(`getMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
     const member = roomMembers?.get(userId);
     return member ? this.cloneMember(member) : null;
+  }
+
+  async removeMember(roomId: string, userId: string): Promise<void> {
+    this.logger.log(`removeMember roomId=${roomId} userId=${userId}`);
+    const roomMembers = this.membersByRoomId.get(roomId);
+    if (roomMembers) {
+      roomMembers.delete(userId);
+    }
   }
 
   async getMembersByRoomId(roomId: string): Promise<RoomMember[]> {
