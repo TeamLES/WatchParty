@@ -1,3 +1,21 @@
 export type { AuthMeResponse } from "./auth.js";
 
 export type { CreateRoomInviteResponse, CreateRoomResponse, GetRoomMembersResponse, GetRoomResponse, GetRoomsResponse, JoinRoomResponse, RoomMemberResponse, RoomMemberRole, RoomStatus, RoomSummaryResponse } from "./rooms.js";
+
+export type {
+  User as WatchPartyUser,
+  Room as WatchPartyRoom,
+  RoomStatus as WatchPartyRoomStatus,
+  RoomMember as WatchPartyRoomMember,
+  RoomMemberRole as WatchPartyRoomMemberRole,
+  Invite as WatchPartyInvite,
+  ChatMessage as WatchPartyChatMessage,
+  WebSocketConnection as WatchPartyWebSocketConnection,
+  PlaybackSnapshot as WatchPartyPlaybackSnapshot,
+  PlaybackState as WatchPartyPlaybackState,
+  ReactionEvent as WatchPartyReactionEvent,
+  ReactionTargetType as WatchPartyReactionTargetType,
+  ScheduledParty as WatchPartyScheduledParty,
+  ScheduledPartyStatus as WatchPartyScheduledPartyStatus,
+  IdempotencyEvent as WatchPartyIdempotencyEvent,
+} from "./watchparty/index.js";
