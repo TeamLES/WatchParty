@@ -142,9 +142,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     fetchRoom();
   }, [fetchRoomSnapshot, roomId, router]);
 
+  const hasRoomLoaded = room !== null;
+
   // Refresh room members and count periodically while the page is open.
   useEffect(() => {
-    if (!room) {
+    if (!hasRoomLoaded) {
       return;
     }
 
@@ -175,11 +177,13 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [fetchRoomSnapshot, room, roomId, router]);
+  }, [fetchRoomSnapshot, hasRoomLoaded, roomId, router]);
+
+  const shouldTrackLeave = room?.isHost === false;
 
   // Best-effort leave on tab close/navigation for non-host members.
   useEffect(() => {
-    if (!room || room.isHost) {
+    if (!shouldTrackLeave) {
       return;
     }
 
@@ -210,7 +214,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       window.removeEventListener("beforeunload", leaveRoom);
       leaveRoom();
     };
-  }, [room, roomId]);
+  }, [roomId, shouldTrackLeave]);
 
   const handlePlay = async () => {
     if (!room?.isHost) {
