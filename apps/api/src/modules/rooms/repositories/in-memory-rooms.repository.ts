@@ -43,7 +43,7 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return this.cloneRoom(room);
   }
 
-    async updateRoom(room: Room): Promise<Room> {
+  async updateRoom(room: Room): Promise<Room> {
     this.logger.log(`updateRoom roomId=${room.roomId}`);
     if (!this.roomsById.has(room.roomId)) {
       throw new Error(`Room with roomId ${room.roomId} does not exist`);
@@ -104,10 +104,7 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return this.cloneMember(member);
   }
 
-  async getMember(
-    roomId: string,
-    userId: string,
-  ): Promise<RoomMember | null> {
+  async getMember(roomId: string, userId: string): Promise<RoomMember | null> {
     this.logger.log(`getMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
     const member = roomMembers?.get(userId);

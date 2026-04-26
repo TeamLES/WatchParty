@@ -23,7 +23,9 @@ export class CognitoJwtVerifierService {
   constructor(private readonly configService: ConfigService) {
     const userPoolId = this.getRequiredEnv('COGNITO_USER_POOL_ID');
     const appClientId = this.getRequiredEnv('COGNITO_APP_CLIENT_ID');
-    this.expectedIssuer = this.normalizeIssuer(this.getRequiredEnv('COGNITO_ISSUER'));
+    this.expectedIssuer = this.normalizeIssuer(
+      this.getRequiredEnv('COGNITO_ISSUER'),
+    );
 
     this.verifier = CognitoJwtVerifier.create({
       userPoolId,

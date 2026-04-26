@@ -13,11 +13,11 @@ import {
   TrashIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { GetRoomResponse } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import type { RoomDetail } from "@/lib/types/rooms";
 
 // YouTube ID Extractor
 const extractYoutubeId = (url: string) => {
@@ -45,7 +45,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
 
-  const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [room, setRoom] = useState<GetRoomResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [videoUrl, setVideoUrl] = useState("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
@@ -90,14 +90,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           }
         }
 
-        setRoom({
-          id: data.roomId,
-          title: data.title,
-          url: data.videoUrl || "",
-          membersCount: data.memberCount,
-          hostId: data.hostUserId,
-          isHost: typeof data.isHost === "boolean" ? data.isHost : undefined,
-        });
+        setRoom(data as GetRoomResponse);
 
         setEditTitle(data.title);
 
@@ -299,7 +292,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      {room.membersCount} watching now
+                      {room.memberCount} watching now
                     </p>
                     {!canControlVideo && (
                       <span className="text-[11px] text-muted-foreground/80 bg-white/5 px-1.5 rounded">View-only mode</span>
@@ -550,11 +543,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
           <div className="space-y-3">
             <label className="text-sm font-semibold text-muted-foreground">
-              Current Members ({room?.membersCount})
+              Current Members ({room?.memberCount})
             </label>
             <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {/* Mock members list for UI showcase */}
-              {[...Array(room?.membersCount || 1)].map((_, i) => (
+              {[...Array(room?.memberCount || 1)].map((_, i) => (
                 <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">

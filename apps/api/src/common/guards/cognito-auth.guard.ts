@@ -17,7 +17,7 @@ export type AuthenticatedRequest = Request & {
 
 @Injectable()
 export class CognitoAuthGuard implements CanActivate {
-  constructor(private readonly verifierService: CognitoJwtVerifierService) { }
+  constructor(private readonly verifierService: CognitoJwtVerifierService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -40,7 +40,10 @@ export class CognitoAuthGuard implements CanActivate {
       request.user = await this.verifierService.verifyAccessToken(token);
     } catch (err) {
       // Log err but allow through, controllers will throw 401 on getRequiredUserSub if user not populated
-      console.warn('Token validation failed, proceeding as unauthenticated guest', err);
+      console.warn(
+        'Token validation failed, proceeding as unauthenticated guest',
+        err,
+      );
     }
     return true;
   }

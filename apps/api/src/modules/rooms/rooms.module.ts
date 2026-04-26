@@ -1,10 +1,14 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+import {
+  logDynamoDbTables,
+  resolveDynamoDbTableNames,
+} from '../../common/dynamodb/dynamodb-table-names';
 import { AuthModule } from '../auth/auth.module';
 import {
-  ROOMS_REPOSITORY,
   normalizeRoomsRepositoryDriver,
+  ROOMS_REPOSITORY,
 } from './constants/rooms-repository.token';
 import { RoomsController } from './rooms.controller';
 import { DynamoDBRoomsRepository } from './repositories/dynamodb-rooms.repository';
@@ -32,9 +36,7 @@ import { RoomsService } from './rooms.service';
           configService.get<string>('ROOMS_REPOSITORY_DRIVER'),
         );
         const region =
-          configService.get<string>('AWS_REGION') ?? 'eu-central-1';
-        const tableName =
-          configService.get<string>('DYNAMODB_ROOMS_TABLE') ?? '(unset)';
+          configService.get<string>('AWS_REGION')?.trim() ?? 'eu-central-1';
         const profile = configService.get<string>('AWS_PROFILE') ?? '(none)';
         const endpoint =
           configService.get<string>('DYNAMODB_ENDPOINT') ?? '(aws-default)';
@@ -42,17 +44,18 @@ import { RoomsService } from './rooms.service';
           configService.get<string>('AWS_ACCESS_KEY_ID') &&
           configService.get<string>('AWS_SECRET_ACCESS_KEY'),
         );
+        const tableNames = resolveDynamoDbTableNames(configService);
 
         logger.log(
           [
             `roomsRepositoryDriver=${selectedDriver}`,
             `awsRegion=${region}`,
-            `dynamoTable=${tableName}`,
             `awsProfile=${profile}`,
             `dynamoEndpoint=${endpoint}`,
             `hasStaticCredentials=${hasStaticCredentials}`,
           ].join(' '),
         );
+        logDynamoDbTables(logger, tableNames);
 
         if (selectedDriver === 'dynamodb') {
           return dynamoRepository;
@@ -64,4 +67,4 @@ import { RoomsService } from './rooms.service';
   ],
   exports: [RoomsService, ROOMS_REPOSITORY],
 })
-export class RoomsModule {}
+export class RoomsModule { }

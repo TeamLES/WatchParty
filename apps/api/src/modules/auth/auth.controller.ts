@@ -16,7 +16,9 @@ import type { VerifiedCognitoAccessToken } from './cognito-jwt-verifier.service'
 export class AuthController {
   @UseGuards(CognitoAuthGuard)
   @Get('me')
-  @ApiOperation({ summary: 'Return claims from the authenticated Cognito access token' })
+  @ApiOperation({
+    summary: 'Return claims from the authenticated Cognito access token',
+  })
   @ApiOkResponse({
     description: 'Authenticated token claims',
     schema: {

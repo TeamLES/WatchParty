@@ -8,6 +8,16 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 
+import type {
+  CreateRoomInviteResponse,
+  CreateRoomResponse,
+  GetRoomMembersResponse,
+  GetRoomResponse,
+  GetRoomsResponse,
+  JoinRoomResponse,
+  RoomMemberResponse,
+  RoomSummaryResponse,
+} from '@watchparty/shared-types';
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
 import type { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import type { CreateRoomDto } from './dto/create-room.dto';
@@ -20,16 +30,6 @@ import {
   RoomAlreadyExistsError,
   type RoomsRepository,
 } from './repositories/rooms.repository';
-import type {
-  CreateRoomInviteResponse,
-  CreateRoomResponse,
-  GetRoomMembersResponse,
-  GetRoomResponse,
-  GetRoomsResponse,
-  JoinRoomResponse,
-  RoomMemberResponse,
-  RoomSummaryResponse,
-} from '@watchparty/shared-types';
 
 @Injectable()
 export class RoomsService {
@@ -73,9 +73,11 @@ export class RoomsService {
         ...(createRoomDto.videoUrl ? { videoUrl: createRoomDto.videoUrl } : {}),
         isPrivate,
         ...(password ? { password } : {}),
+        visibilityStatus: isPrivate ? 'private' : 'public',
         hostUserId: userId,
         status: 'active',
         createdAt,
+        updatedAt: createdAt,
       };
 
       const hostMember: RoomMember = {
@@ -146,14 +148,13 @@ export class RoomsService {
         : {}),
       isPrivate,
       ...(password !== undefined ? { password } : {}),
+      visibilityStatus: isPrivate ? 'private' : 'public',
+      updatedAt: this.nowIsoString(),
     };
 
     if (!isPrivate) {
       delete updatedRoom.password;
     }
-
-    // In order for videoUrl to be updated to null/undefined we must allow clearing it.
-    // updateRoomDto doesn't permit null right now based on CreateRoomDto, but we map undefined.
 
     await this.roomsRepository.updateRoom(updatedRoom);
 
@@ -178,9 +179,7 @@ export class RoomsService {
 
     const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
-        const memberCount = await this.roomsRepository.countMembers(
-          room.roomId,
-        );
+        const memberCount = await this.roomsRepository.countMembers(room.roomId);
         return this.toRoomSummaryResponse(room, memberCount);
       }),
     );
@@ -212,8 +211,6 @@ export class RoomsService {
     this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
 
-    // ALWAYS require and validate password for private rooms,
-    // even for the host or existing members, before allowing them to "join" again.
     if (room.isPrivate) {
       const providedPassword = joinRoomDto?.password?.trim() ?? '';
       const storedPassword = room.password ?? '';
@@ -237,7 +234,6 @@ export class RoomsService {
         alreadyMember: true,
       };
     }
-
 
     const member: RoomMember = {
       roomId,
@@ -270,7 +266,7 @@ export class RoomsService {
     const member = await this.roomsRepository.getMember(roomId, userId);
     if (!member) {
       this.logger.warn(`leaveRoom not a member roomId=${roomId} userId=${userId}`);
-      return; // Idempotent: if not a member, do nothing
+      return;
     }
 
     await this.roomsRepository.removeMember(roomId, userId);

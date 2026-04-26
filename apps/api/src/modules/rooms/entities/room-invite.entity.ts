@@ -4,4 +4,6 @@ export interface RoomInvite {
   createdBy: string;
   createdAt: string;
   expiresAt?: string;
+  maxUses?: number;
+  usedCount?: number;
 }

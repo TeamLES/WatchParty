@@ -5,4 +5,6 @@ export interface RoomMember {
   userId: string;
   role: RoomMemberRole;
   joinedAt: string;
+  lastSeenAt?: string;
+  nickname?: string;
 }

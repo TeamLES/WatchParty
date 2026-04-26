@@ -3,17 +3,17 @@
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LockIcon, MonitorPlayIcon } from "lucide-react";
+import type { GetRoomResponse } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { JoinRoomDetail } from "@/lib/types/rooms";
 
 export default function JoinRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
   const router = useRouter();
 
-  const [room, setRoom] = useState<JoinRoomDetail | null>(null);
+  const [room, setRoom] = useState<GetRoomResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [isJoining, setIsJoining] = useState(false);
@@ -41,7 +41,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
           return;
         }
 
-        setRoom(data);
+        setRoom(data as GetRoomResponse);
       } catch (err) {
         console.error(err);
       } finally {

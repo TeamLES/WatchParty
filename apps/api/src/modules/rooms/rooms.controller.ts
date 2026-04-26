@@ -1,11 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
-  Post,
   Patch,
-  Delete,
+  Post,
   UnauthorizedException,
   UseGuards,
   UsePipes,
@@ -24,6 +24,14 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
+import type {
+  CreateRoomInviteResponse,
+  CreateRoomResponse,
+  GetRoomMembersResponse,
+  GetRoomResponse,
+  GetRoomsResponse,
+  JoinRoomResponse,
+} from '@watchparty/shared-types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CognitoAuthGuard } from '../../common/guards/cognito-auth.guard';
 import type { VerifiedCognitoAccessToken } from '../auth/cognito-jwt-verifier.service';
@@ -32,14 +40,6 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import type {
-  CreateRoomInviteResponse,
-  CreateRoomResponse,
-  GetRoomsResponse,
-  GetRoomMembersResponse,
-  GetRoomResponse,
-  JoinRoomResponse,
-} from '@watchparty/shared-types';
 import { RoomsService } from './rooms.service';
 
 @Controller('api/rooms')
@@ -57,24 +57,7 @@ export class RoomsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all rooms' })
-  @ApiOkResponse({
-    description: 'Rooms listed',
-    schema: {
-      example: [
-        {
-          roomId: 'a1b2c3d4e5f6a7b8',
-          title: 'Friday Night Cinema',
-          videoUrl: null,
-          isPrivate: true,
-          password: 'watchparty123',
-          hostUserId: 'cognito-sub',
-          memberCount: 1,
-          status: 'active',
-          createdAt: '2026-03-28T12:00:00.000Z',
-        },
-      ],
-    },
-  })
+  @ApiOkResponse({ description: 'Rooms listed' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   async getRooms(): Promise<GetRoomsResponse> {
     return this.roomsService.getRooms();
@@ -83,22 +66,7 @@ export class RoomsController {
   @Post()
   @ApiOperation({ summary: 'Create a room and assign current user as host' })
   @ApiBody({ type: CreateRoomDto })
-  @ApiCreatedResponse({
-    description: 'Room created',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        title: 'Friday Night Cinema',
-        videoUrl: null,
-        isPrivate: true,
-        password: 'watchparty123',
-        hostUserId: 'cognito-sub',
-        memberCount: 1,
-        status: 'active',
-        createdAt: '2026-03-28T12:00:00.000Z',
-      },
-    },
-  })
+  @ApiCreatedResponse({ description: 'Room created' })
   @ApiBadRequestResponse({ description: 'Invalid room payload' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   async createRoom(
@@ -113,21 +81,7 @@ export class RoomsController {
   @ApiOperation({ summary: 'Update room (host only)' })
   @ApiParam({ name: 'roomId', type: String })
   @ApiBody({ type: UpdateRoomDto })
-  @ApiOkResponse({
-    description: 'Room updated',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        title: 'Friday Night Cinema Updated',
-        videoUrl: 'https://new-url.com',
-        isPrivate: true,
-        hostUserId: 'cognito-sub',
-        memberCount: 1,
-        status: 'active',
-        createdAt: '2026-03-28T12:00:00.000Z',
-      },
-    },
-  })
+  @ApiOkResponse({ description: 'Room updated' })
   @ApiBadRequestResponse({ description: 'Invalid payload or roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiForbiddenResponse({ description: 'Only host can update the room' })
@@ -136,7 +90,7 @@ export class RoomsController {
     @Param() params: RoomIdParamDto,
     @Body() updateRoomDto: UpdateRoomDto,
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
-  ) {
+  ): Promise<GetRoomResponse> {
     const userId = this.getRequiredUserSub(user);
     return this.roomsService.updateRoom(params.roomId, userId, updateRoomDto);
   }
@@ -161,31 +115,7 @@ export class RoomsController {
   @Get(':roomId')
   @ApiOperation({ summary: 'Get room metadata and members' })
   @ApiParam({ name: 'roomId', type: String })
-  @ApiOkResponse({
-    description: 'Room found',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        title: 'Friday Night Cinema',
-        videoUrl: null,
-        isPrivate: true,
-        password: 'watchparty123',
-        hostUserId: 'cognito-sub',
-        memberCount: 2,
-        status: 'active',
-        createdAt: '2026-03-28T12:00:00.000Z',
-        isHost: true,
-        isMember: true,
-        members: [
-          {
-            userId: 'cognito-sub',
-            role: 'host',
-            joinedAt: '2026-03-28T12:00:00.000Z',
-          },
-        ],
-      },
-    },
-  })
+  @ApiOkResponse({ description: 'Room found' })
   @ApiBadRequestResponse({ description: 'Invalid roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiNotFoundResponse({ description: 'Room not found' })
@@ -201,18 +131,7 @@ export class RoomsController {
   @ApiOperation({ summary: 'Join room as viewer (idempotent)' })
   @ApiParam({ name: 'roomId', type: String })
   @ApiBody({ type: JoinRoomDto, required: false })
-  @ApiOkResponse({
-    description: 'Joined room or already member',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        userId: 'viewer-sub',
-        role: 'viewer',
-        joinedAt: '2026-03-28T12:05:00.000Z',
-        alreadyMember: false,
-      },
-    },
-  })
+  @ApiOkResponse({ description: 'Joined room or already member' })
   @ApiBadRequestResponse({ description: 'Invalid roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiNotFoundResponse({ description: 'Room not found' })
@@ -246,18 +165,7 @@ export class RoomsController {
   @ApiOperation({ summary: 'Create invite code for a room (host only)' })
   @ApiParam({ name: 'roomId', type: String })
   @ApiBody({ type: CreateRoomInviteDto })
-  @ApiCreatedResponse({
-    description: 'Invite created',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        inviteCode: 'xyz789abc123',
-        createdBy: 'host-sub',
-        createdAt: '2026-03-28T12:10:00.000Z',
-        expiresAt: null,
-      },
-    },
-  })
+  @ApiCreatedResponse({ description: 'Invite created' })
   @ApiBadRequestResponse({ description: 'Invalid payload or roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiForbiddenResponse({ description: 'Only host can create invites' })
@@ -278,27 +186,7 @@ export class RoomsController {
   @Get(':roomId/members')
   @ApiOperation({ summary: 'List room members' })
   @ApiParam({ name: 'roomId', type: String })
-  @ApiOkResponse({
-    description: 'Members listed',
-    schema: {
-      example: {
-        roomId: 'a1b2c3d4e5f6a7b8',
-        memberCount: 2,
-        members: [
-          {
-            userId: 'host-sub',
-            role: 'host',
-            joinedAt: '2026-03-28T12:00:00.000Z',
-          },
-          {
-            userId: 'viewer-sub',
-            role: 'viewer',
-            joinedAt: '2026-03-28T12:05:00.000Z',
-          },
-        ],
-      },
-    },
-  })
+  @ApiOkResponse({ description: 'Members listed' })
   @ApiBadRequestResponse({ description: 'Invalid roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiNotFoundResponse({ description: 'Room not found' })

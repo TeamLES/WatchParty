@@ -142,7 +142,12 @@ async function bootstrap() {
     };
   }
 
-  SwaggerModule.setup(swaggerDocsPath, app, swaggerDocument, swaggerSetupOptions);
+  SwaggerModule.setup(
+    swaggerDocsPath,
+    app,
+    swaggerDocument,
+    swaggerSetupOptions,
+  );
 
   await app.listen(appPort);
 }
