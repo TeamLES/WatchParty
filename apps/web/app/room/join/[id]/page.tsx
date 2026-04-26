@@ -27,16 +27,8 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
         }
         const data = await res.json();
 
-        // If 'isPrivate' is true, we must NOT bypass, because we need the password.
-        // Also check if they already unlocked it in this session.
-        if (data.isPrivate) {
-          const isUnlocked = sessionStorage.getItem(`unlocked_room_${roomId}`);
-          if (isUnlocked) {
-            router.replace(`/room/${roomId}`);
-            return;
-          }
-        } else if (data.isMember) {
-          // Auto-bypass for public rooms if already a member
+        // Only bypass join page if the user is already a room member.
+        if (data.isMember) {
           router.replace(`/room/${roomId}`);
           return;
         }
@@ -49,7 +41,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
       }
     }
     fetchRoom();
-  }, [roomId]);
+  }, [roomId, router]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,8 +79,9 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
       }
 
       router.replace(`/room/${roomId}`);
-    } catch (err: any) {
-      alert(`Chyba pri pripájaní: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      alert(`Chyba pri pripájaní: ${message}`);
       setIsJoining(false);
     }
   };
