@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LockIcon,
@@ -29,24 +29,48 @@ export default function HubPage() {
   const [rooms, setRooms] = useState<RoomSummaryResponse[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
 
-  useEffect(() => {
-    async function fetchRooms() {
-      try {
-        const res = await fetch("/api/rooms", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          setRooms(data);
-        } else {
-          console.error("Failed to fetch rooms:", res.status);
-        }
-      } catch (err) {
-        console.error("Error fetching rooms:", err);
-      } finally {
-        setIsLoadingRooms(false);
+  const fetchRooms = useCallback(async () => {
+    try {
+      const res = await fetch("/api/rooms", { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as RoomSummaryResponse[];
+        setRooms(data);
+      } else {
+        console.error("Failed to fetch rooms:", res.status);
       }
+    } catch (err) {
+      console.error("Error fetching rooms:", err);
+    } finally {
+      setIsLoadingRooms(false);
     }
-    fetchRooms();
   }, []);
+
+  useEffect(() => {
+    void fetchRooms();
+
+    const intervalId = window.setInterval(() => {
+      void fetchRooms();
+    }, 8000);
+
+    const handleWindowFocus = () => {
+      void fetchRooms();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchRooms();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchRooms]);
 
   // Create Room Form State
   const [title, setTitle] = useState("");
@@ -106,7 +130,7 @@ export default function HubPage() {
 
         {/* HERO CREATE SECTION */}
         <section className="glass-card rounded-[2rem] p-6 sm:p-12 border-white/10 relative overflow-hidden flex flex-col items-center text-center shadow-2xl">
-          <div className="absolute top-1/2 left-1/2 -z-10 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -z-10 h-100 w-150 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
 
           <Badge variant="outline" className="glass-card gap-1 py-1 px-3 text-xs font-semibold border-primary/30 text-primary mb-6">
             New Session
@@ -125,7 +149,7 @@ export default function HubPage() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Session name (e.g. Lofi Cafe)..."
               required
-              className="flex-1 min-h-[3rem] bg-transparent border-none shadow-none focus-visible:ring-0 text-base sm:text-lg px-4"
+              className="flex-1 min-h-12 bg-transparent border-none shadow-none focus-visible:ring-0 text-base sm:text-lg px-4"
             />
 
             <div className="h-8 w-px bg-white/10 hidden sm:block mx-2"></div>
@@ -154,7 +178,7 @@ export default function HubPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Secret passcode..."
                 required={isPrivate}
-                className="w-full sm:w-40 min-h-[3rem] bg-black/40 border-white/10 focus-visible:ring-red-500/50 transition-all rounded-2xl text-sm mb-2 sm:mb-0"
+                className="w-full sm:w-40 min-h-12 bg-black/40 border-white/10 focus-visible:ring-red-500/50 transition-all rounded-2xl text-sm mb-2 sm:mb-0"
               />
             )}
 
@@ -217,7 +241,7 @@ export default function HubPage() {
                   )}
 
                   {!extractYoutubeId(room.videoUrl) && (
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
                   )}
 
                   <div className="absolute top-4 right-4 z-10">

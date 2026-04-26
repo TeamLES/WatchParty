@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useRef, useEffect } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CopyIcon,
@@ -13,7 +13,11 @@ import {
   TrashIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { GetRoomResponse } from "@watchparty/shared-types";
+import type {
+  AuthMeResponse,
+  GetRoomResponse,
+  RoomMemberResponse,
+} from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,29 +64,59 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
   const [editTitle, setEditTitle] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const hasLeftRoomRef = useRef(false);
   const router = useRouter();
 
-  // Fetch actual room data
+  const fetchRoomSnapshot = useCallback(async () => {
+    const res = await fetch(`/api/rooms/${roomId}`, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error("Failed to fetch room");
+    }
+
+    return (await res.json()) as GetRoomResponse;
+  }, [roomId]);
+
+  const formatMemberDisplayName = useCallback((member: RoomMemberResponse) => {
+    const nickname = member.nickname?.trim();
+
+    if (nickname) {
+      return nickname;
+    }
+
+    if (member.userId.startsWith("guest-")) {
+      return `Guest ${member.userId.slice(-4)}`;
+    }
+
+    return `User ${member.userId.slice(0, 8)}`;
+  }, []);
+
+  // Fetch initial room data and current user.
   useEffect(() => {
     async function fetchRoom() {
       try {
-        const res = await fetch(`/api/rooms/${roomId}`);
-        if (!res.ok) {
-          throw new Error("Failed to fetch room");
+        const [roomData, meResponse] = await Promise.all([
+          fetchRoomSnapshot(),
+          fetch("/api/me", { cache: "no-store" }),
+        ]);
+
+        if (meResponse.ok) {
+          const me = (await meResponse.json()) as AuthMeResponse;
+          setCurrentUserId(me.sub);
         }
-        const data = await res.json();
 
-        console.log("Room INFO (vrátené z API):", data);
-        console.log("Video URL tejto roomky:", data.videoUrl);
+        console.log("Room INFO (vrátené z API):", roomData);
+        console.log("Video URL tejto roomky:", roomData.videoUrl);
 
-        if (!data.isMember) {
+        if (!roomData.isMember) {
           router.replace(`/room/join/${roomId}`);
           return;
         }
 
-        if (data.isPrivate) {
+        if (roomData.isPrivate) {
           const isUnlocked = sessionStorage.getItem(`unlocked_room_${roomId}`);
           if (!isUnlocked) {
             router.replace(`/room/join/${roomId}`);
@@ -90,13 +124,13 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           }
         }
 
-        setRoom(data as GetRoomResponse);
+        setRoom(roomData);
 
-        setEditTitle(data.title);
+        setEditTitle(roomData.title);
 
-        if (data.videoUrl) {
-          setVideoUrl(data.videoUrl);
-          setActiveVideoId(extractYoutubeId(data.videoUrl));
+        if (roomData.videoUrl) {
+          setVideoUrl(roomData.videoUrl);
+          setActiveVideoId(extractYoutubeId(roomData.videoUrl));
         }
 
       } catch (err) {
@@ -106,7 +140,77 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       }
     }
     fetchRoom();
-  }, [roomId]);
+  }, [fetchRoomSnapshot, roomId, router]);
+
+  // Refresh room members and count periodically while the page is open.
+  useEffect(() => {
+    if (!room) {
+      return;
+    }
+
+    const refreshRoom = async () => {
+      try {
+        const latestRoom = await fetchRoomSnapshot();
+
+        if (!latestRoom.isMember) {
+          router.replace(`/room/join/${roomId}`);
+          return;
+        }
+
+        setRoom(latestRoom);
+
+        if (latestRoom.videoUrl) {
+          setVideoUrl(latestRoom.videoUrl);
+          setActiveVideoId(extractYoutubeId(latestRoom.videoUrl));
+        }
+      } catch (error) {
+        console.error("Failed to refresh room", error);
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshRoom();
+    }, 8000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchRoomSnapshot, room, roomId, router]);
+
+  // Best-effort leave on tab close/navigation for non-host members.
+  useEffect(() => {
+    if (!room || room.isHost) {
+      return;
+    }
+
+    hasLeftRoomRef.current = false;
+
+    const leaveRoom = () => {
+      if (hasLeftRoomRef.current) {
+        return;
+      }
+
+      hasLeftRoomRef.current = true;
+      const leaveUrl = `/api/rooms/${roomId}/leave`;
+
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(leaveUrl, new Blob());
+        return;
+      }
+
+      void fetch(leaveUrl, {
+        method: "POST",
+        keepalive: true,
+      });
+    };
+
+    window.addEventListener("beforeunload", leaveRoom);
+
+    return () => {
+      window.removeEventListener("beforeunload", leaveRoom);
+      leaveRoom();
+    };
+  }, [room, roomId]);
 
   const handlePlay = async () => {
     if (!room?.isHost) {
@@ -236,11 +340,43 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
       if (!res.ok) throw new Error("Failed to update room title");
 
-      setRoom(prev => prev ? { ...prev, title: editTitle.trim() } : null);
+      const updatedRoom = (await res.json()) as GetRoomResponse;
+      setRoom(updatedRoom);
+      setEditTitle(updatedRoom.title);
       setShowSettingsModal(false);
     } catch (err) {
       console.error(err);
       alert("Error updating room settings.");
+    }
+  };
+
+  const handleKickMember = async (memberUserId: string) => {
+    if (!room?.isHost) {
+      return;
+    }
+
+    setKickingMemberId(memberUserId);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/kick`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: memberUserId }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to kick member");
+      }
+
+      const latestRoom = await fetchRoomSnapshot();
+      setRoom(latestRoom);
+    } catch (error) {
+      console.error(error);
+      alert("Unable to kick this member right now.");
+    } finally {
+      setKickingMemberId(null);
     }
   };
 
@@ -366,7 +502,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           </div>
 
           {/* Video Player */}
-          <div className="glass-card rounded-3xl flex-1 relative overflow-hidden bg-black/60 shadow-2xl min-h-[300px]">
+          <div className="glass-card rounded-3xl flex-1 relative overflow-hidden bg-black/60 shadow-2xl min-h-75">
             {/* Flying Emojis */}
             <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
               {flyingEmojis.map(({ id, emoji, left, rotation }) => (
@@ -405,7 +541,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         </section>
 
         {/* Live Chat Column */}
-        <aside className="w-full lg:w-96 xl:w-[400px] flex flex-col shrink-0 gap-4 h-[500px] lg:h-auto pb-2">
+        <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 h-125 lg:h-auto pb-2">
           <div className="glass-card rounded-3xl flex flex-col h-full overflow-hidden border-white/10 shadow-lg">
 
             {/* Chat Header */}
@@ -545,26 +681,47 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             <label className="text-sm font-semibold text-muted-foreground">
               Current Members ({room?.memberCount})
             </label>
-            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-              {/* Mock members list for UI showcase */}
-              {[...Array(room?.memberCount || 1)].map((_, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
-                      {i === 0 ? 'M' : `U${i}`}
+            <div className="flex flex-col gap-2 max-h-50 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {(room?.members ?? []).map((member) => {
+                const isCurrentUser = currentUserId === member.userId;
+                const displayName = formatMemberDisplayName(member);
+                const avatarLabel = displayName.charAt(0).toUpperCase() || "U";
+                const canKickMember =
+                  room?.isHost && member.role !== "host" && !isCurrentUser;
+
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+                        {avatarLabel}
+                      </div>
+                      <span className="text-sm font-medium">
+                        {displayName}
+                        {isCurrentUser ? " (you)" : ""}
+                        {member.role === "host" && (
+                          <span className="ml-2 text-[10px] text-primary">HOST</span>
+                        )}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium">
-                      {i === 0 ? 'Me (You)' : `User ${i}`}
-                      {i === 0 && room?.isHost && <span className="ml-2 text-[10px] text-primary">HOST</span>}
-                    </span>
+
+                    {canKickMember ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg px-3"
+                        onClick={() => void handleKickMember(member.userId)}
+                        disabled={kickingMemberId === member.userId}
+                      >
+                        {kickingMemberId === member.userId ? "Kicking..." : "Kick"}
+                      </Button>
+                    ) : null}
                   </div>
-                  {room?.isHost && i !== 0 && (
-                    <Button type="button" variant="ghost" size="sm" className="h-8 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg px-3">
-                      Kick
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

@@ -47,6 +47,7 @@ export class RoomsService {
   async createRoom(
     userId: string,
     createRoomDto: CreateRoomDto,
+    nickname?: string,
   ): Promise<CreateRoomResponse> {
     this.logger.log(`createRoom userId=${userId}`);
     const maxAttempts = 3;
@@ -85,6 +86,7 @@ export class RoomsService {
         userId,
         role: 'host',
         joinedAt: createdAt,
+        ...(nickname ? { nickname } : {}),
       };
 
       try {
@@ -207,6 +209,7 @@ export class RoomsService {
     roomId: string,
     userId: string,
     joinRoomDto: JoinRoomDto,
+    nickname?: string,
   ): Promise<JoinRoomResponse> {
     this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
@@ -240,6 +243,7 @@ export class RoomsService {
       userId,
       role: room.hostUserId === userId ? 'host' : 'viewer',
       joinedAt: this.nowIsoString(),
+      ...(nickname ? { nickname } : {}),
     };
 
     const addedMember = await this.roomsRepository.addMember(member);
@@ -271,6 +275,36 @@ export class RoomsService {
 
     await this.roomsRepository.removeMember(roomId, userId);
     this.logger.log(`leaveRoom success roomId=${roomId} userId=${userId}`);
+  }
+
+  async kickMember(
+    roomId: string,
+    hostUserId: string,
+    memberUserId: string,
+  ): Promise<void> {
+    this.logger.log(
+      `kickMember roomId=${roomId} hostUserId=${hostUserId} memberUserId=${memberUserId}`,
+    );
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.hostUserId !== hostUserId) {
+      throw new ForbiddenException('Only the host can kick members');
+    }
+
+    if (memberUserId === room.hostUserId) {
+      throw new BadRequestException('Host cannot be kicked from the room');
+    }
+
+    const member = await this.roomsRepository.getMember(roomId, memberUserId);
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this room');
+    }
+
+    await this.roomsRepository.removeMember(roomId, memberUserId);
+    this.logger.log(
+      `kickMember success roomId=${roomId} hostUserId=${hostUserId} memberUserId=${memberUserId}`,
+    );
   }
 
   async createInvite(
@@ -348,6 +382,7 @@ export class RoomsService {
       userId: member.userId,
       role: member.role,
       joinedAt: member.joinedAt,
+      nickname: member.nickname ?? null,
     };
   }
 

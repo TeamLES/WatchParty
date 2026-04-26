@@ -6,6 +6,7 @@ export interface RoomMemberResponse {
   userId: string;
   role: RoomMemberRole;
   joinedAt: string;
+  nickname?: string | null;
 }
 
 export interface RoomSummaryResponse {

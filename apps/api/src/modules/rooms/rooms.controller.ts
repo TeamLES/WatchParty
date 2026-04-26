@@ -38,6 +38,7 @@ import type { VerifiedCognitoAccessToken } from '../auth/cognito-jwt-verifier.se
 import { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { KickRoomMemberDto } from './dto/kick-room-member.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
@@ -74,7 +75,11 @@ export class RoomsController {
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<CreateRoomResponse> {
     const userId = this.getRequiredUserSub(user);
-    return this.roomsService.createRoom(userId, createRoomDto);
+    return this.roomsService.createRoom(
+      userId,
+      createRoomDto,
+      this.getUserDisplayName(user),
+    );
   }
 
   @Patch(':roomId')
@@ -141,7 +146,12 @@ export class RoomsController {
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<JoinRoomResponse> {
     const userId = user?.sub || `guest-${Math.random().toString(36).substring(7)}`;
-    return this.roomsService.joinRoom(params.roomId, userId, joinRoomDto);
+    return this.roomsService.joinRoom(
+      params.roomId,
+      userId,
+      joinRoomDto,
+      this.getUserDisplayName(user),
+    );
   }
 
   @Post(':roomId/leave')
@@ -159,6 +169,30 @@ export class RoomsController {
     const userId = this.getRequiredUserSub(user);
     await this.roomsService.leaveRoom(params.roomId, userId);
     return { message: 'Left room successfully' };
+  }
+
+  @Post(':roomId/kick')
+  @ApiOperation({ summary: 'Kick a member from room (host only)' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiBody({ type: KickRoomMemberDto })
+  @ApiOkResponse({ description: 'Member kicked successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid roomId or member payload' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({ description: 'Only host can kick members' })
+  @ApiNotFoundResponse({ description: 'Room or member not found' })
+  async kickRoomMember(
+    @Param() params: RoomIdParamDto,
+    @Body() kickRoomMemberDto: KickRoomMemberDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<{ message: string }> {
+    const hostUserId = this.getRequiredUserSub(user);
+    await this.roomsService.kickMember(
+      params.roomId,
+      hostUserId,
+      kickRoomMemberDto.userId,
+    );
+
+    return { message: 'Member kicked successfully' };
   }
 
   @Post(':roomId/invites')
@@ -204,5 +238,32 @@ export class RoomsController {
     }
 
     return user.sub;
+  }
+
+  private getUserDisplayName(
+    user: VerifiedCognitoAccessToken | null,
+  ): string | undefined {
+    if (!user) {
+      return undefined;
+    }
+
+    const candidates = [
+      user.username,
+      user.preferred_username,
+      user.email,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return undefined;
   }
 }
