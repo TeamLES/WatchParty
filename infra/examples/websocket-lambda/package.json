@@ -1,0 +1,21 @@
+{
+  "name": "watchparty-ws-lambda",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('build',{recursive:true,force:true});fs.rmSync('watchparty-ws-lambda.zip',{force:true});\"",
+    "build": "esbuild handler.ts --bundle --platform=node --target=node20 --format=cjs --outfile=build/handler.js",
+    "zip": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Compress-Archive -Path build/handler.js -DestinationPath watchparty-ws-lambda.zip -Force\"",
+    "package": "pnpm clean && pnpm build && pnpm zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.0.0"
+  }
+}

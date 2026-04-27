@@ -573,7 +573,7 @@ async function onLeaveRoom(
     new UpdateCommand({
       TableName: wsConnectionsTable,
       Key: { connectionId },
-      UpdateExpression: "REMOVE roomId SET lastSeenAt = :lastSeenAt",
+      UpdateExpression: "SET lastSeenAt = :lastSeenAt REMOVE roomId",
       ExpressionAttributeValues: {
         ":lastSeenAt": nowIso(),
       },

@@ -31,11 +31,12 @@ export default function JoinRoomPage({
         }
         const data = await res.json();
 
-        // Only bypass join page if the user is already a room member.
-        if (data.isMember) {
-          router.replace(`/room/${roomId}`);
-          return;
-        }
+          // Only bypass join page if the user is already a room member and room is NOT private.
+          // User requested that private rooms ALWAYS ask for a password.
+          if (data.isMember && !data.isPrivate) {
+            router.replace(`/room/${roomId}`);
+            return;
+          }
 
         setRoom(data as GetRoomResponse);
       } catch (err) {

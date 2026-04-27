@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - infra/examples/*
 
 ignoredBuiltDependencies:
   - '@nestjs/core'

@@ -181,6 +181,7 @@ export function SyncedYouTubePlayer({
   const playbackStateRef = useRef<PlaybackState>("paused");
   const playerReadyRef = useRef(false);
   const isHostRef = useRef(isHost);
+  const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
 
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
@@ -302,6 +303,10 @@ export function SyncedYouTubePlayer({
     },
     [readPositionMs, roomId, sendSocketMessage],
   );
+
+  useEffect(() => {
+    sendPlaybackEventRef.current = sendPlaybackEvent;
+  }, [sendPlaybackEvent]);
 
   const applyRemotePlayback = useCallback(
     (event: PlaybackSnapshotEvent | PlaybackSyncEvent) => {
@@ -524,6 +529,9 @@ export function SyncedYouTubePlayer({
               }
 
               if (event.data === youtube.PlayerState.PLAYING) {
+                if (playbackStateRef.current !== "playing" && isHostRef.current) {
+                  sendPlaybackEventRef.current?.("play", "playing");
+                }
                 setPlaybackState("playing");
               }
 
@@ -531,6 +539,9 @@ export function SyncedYouTubePlayer({
                 event.data === youtube.PlayerState.PAUSED ||
                 event.data === youtube.PlayerState.ENDED
               ) {
+                if (playbackStateRef.current !== "paused" && isHostRef.current) {
+                  sendPlaybackEventRef.current?.("pause", "paused");
+                }
                 setPlaybackState("paused");
               }
 

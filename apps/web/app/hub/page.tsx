@@ -111,13 +111,11 @@ export default function HubPage() {
         return;
       }
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (isPrivate) {
-        sessionStorage.setItem(`unlocked_room_${data.roomId}`, "true");
-      }
-
-      router.push(`/room/${data.roomId}`);
+        // By user requirement, ALWAYS ask for password, even for the host.
+        // Bypassing directly to the room is removed.
+        router.push(`/room/join/${data.roomId}`);
     } catch (error) {
       console.error("Failed to create room", error);
     } finally {
