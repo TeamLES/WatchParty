@@ -28,7 +28,9 @@ const LOGIN_ERROR_MESSAGES: Record<string, string> = {
     "Your login session could not be verified. Please start a fresh login.",
 };
 
-function normalizeErrorCode(errorParam: string | string[] | undefined): string | null {
+function normalizeErrorCode(
+  errorParam: string | string[] | undefined,
+): string | null {
   if (!errorParam) {
     return null;
   }
@@ -44,16 +46,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const errorCode = normalizeErrorCode(resolvedSearchParams?.error);
   const errorMessage = errorCode
-    ? LOGIN_ERROR_MESSAGES[errorCode] ??
-    "Sign in failed. Reset the session and try again."
+    ? (LOGIN_ERROR_MESSAGES[errorCode] ??
+      "Sign in failed. Reset the session and try again.")
     : null;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.22),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.18),transparent_36%),linear-gradient(180deg,#09090b,#0f071a)] px-6 py-14 text-foreground">
+    <main className="page-surface min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.22),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_38%),linear-gradient(180deg,#f9f5ff,#efe7ff)] px-6 py-14 text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.22),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_40%),linear-gradient(180deg,#09090b,#150a20)]">
       <section className="relative mx-auto grid w-full max-w-5xl items-start gap-10 md:grid-cols-[1fr_440px]">
         <div className="pointer-events-none absolute right-6 top-1/2 -z-10 hidden h-72 w-72 -translate-y-1/2 rounded-full bg-primary/20 blur-3xl md:block" />
         <div className="space-y-6">
-          <Badge variant="secondary" className="w-fit bg-primary/15 text-primary">
+          <Badge
+            variant="secondary"
+            className="w-fit bg-primary/15 text-primary"
+          >
             Secure Auth
           </Badge>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
@@ -69,7 +74,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
         </div>
 
-        <Card className="rounded-2xl border-white/10 bg-black/40 shadow-[0_20px_60px_rgba(76,29,149,0.25)] backdrop-blur-2xl">
+        <Card className="rounded-2xl border-border/60 bg-card/85 shadow-[0_20px_60px_rgba(124,58,237,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/40 dark:shadow-[0_20px_60px_rgba(168,85,247,0.22)]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <FilmIcon className="size-4" />
@@ -100,12 +105,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
             <p className="text-center text-xs text-muted-foreground">
               Need a fresh session?{" "}
-              <a href="/logout" className="font-medium text-primary hover:underline">
+              <a
+                href="/logout"
+                className="font-medium text-primary hover:underline"
+              >
                 Logout and reset
               </a>
             </p>
           </CardContent>
-          <CardFooter className="justify-end border-t border-white/10 pt-4">
+          <CardFooter className="justify-end border-t border-border/60 pt-4 dark:border-white/10">
             <Link
               href="/"
               className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"

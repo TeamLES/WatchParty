@@ -18,7 +18,7 @@ export default async function RoomLayout({ children }: RoomLayoutProps) {
   return (
     <>
       <AuthenticatedHeader />
-      <div className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.06),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.06),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.04),transparent_45%)]">
+      <div className="page-surface min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.14),transparent_34%),radial-gradient(circle_at_75%_20%,rgba(139,92,246,0.12),transparent_38%),radial-gradient(circle_at_50%_80%,rgba(192,132,252,0.1),transparent_46%)] dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.16),transparent_36%),radial-gradient(circle_at_75%_20%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_80%,rgba(192,132,252,0.12),transparent_50%)]">
         {children}
       </div>
     </>

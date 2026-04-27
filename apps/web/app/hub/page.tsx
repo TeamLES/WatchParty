@@ -88,10 +88,11 @@ export default function HubPage() {
     setIsSubmitting(true);
 
     try {
-      const payload: { title: string; isPrivate: boolean; password?: string } = {
-        title,
-        isPrivate,
-      };
+      const payload: { title: string; isPrivate: boolean; password?: string } =
+        {
+          title,
+          isPrivate,
+        };
 
       if (isPrivate && password) {
         payload.password = password;
@@ -125,14 +126,16 @@ export default function HubPage() {
   };
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.2),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(79,70,229,0.18),transparent_36%),radial-gradient(circle_at_50%_100%,rgba(147,51,234,0.16),transparent_45%)] font-sans text-foreground">
+    <main className="page-surface min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(192,132,252,0.12),transparent_48%)] font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.22),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(139,92,246,0.18),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(192,132,252,0.16),transparent_50%)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 p-4 pb-20 sm:p-8">
-
         {/* HERO CREATE SECTION */}
-        <section className="glass-card rounded-[2rem] p-6 sm:p-12 border-white/10 relative overflow-hidden flex flex-col items-center text-center shadow-2xl">
+        <section className="glass-card relative flex flex-col items-center overflow-hidden rounded-[2rem] border-violet-300/45 bg-white/68 p-6 text-center shadow-2xl dark:border-white/10 dark:bg-card/60 sm:p-12">
           <div className="absolute top-1/2 left-1/2 -z-10 h-100 w-150 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
 
-          <Badge variant="outline" className="glass-card gap-1 py-1 px-3 text-xs font-semibold border-primary/30 text-primary mb-6">
+          <Badge
+            variant="outline"
+            className="mb-6 gap-1 border-primary/35 bg-violet-50/80 px-3 py-1 text-xs font-semibold text-primary shadow-sm dark:bg-black/25"
+          >
             New Session
           </Badge>
 
@@ -140,32 +143,36 @@ export default function HubPage() {
             Start a Watch Party
           </h2>
           <p className="text-muted-foreground text-lg sm:text-xl mb-10 max-w-2xl font-medium">
-            Create a room instantly. Invite friends and watch your favorite videos in perfect sync with live chat.
+            Create a room instantly. Invite friends and watch your favorite
+            videos in perfect sync with live chat.
           </p>
 
-          <form onSubmit={handleCreateRoom} className="w-full max-w-4xl flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-black/40 p-2 sm:p-3 rounded-3xl border border-white/10 backdrop-blur-md shadow-inner">
+          <form
+            onSubmit={handleCreateRoom}
+            className="w-full max-w-4xl flex flex-col sm:flex-row gap-3 items-stretch sm:items-center rounded-3xl border border-violet-300/40 bg-white/72 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_35px_rgba(124,58,237,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-black/35 sm:p-3"
+          >
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Session name (e.g. Lofi Cafe)..."
               required
-              className="flex-1 min-h-12 bg-transparent border-none shadow-none focus-visible:ring-0 text-base sm:text-lg px-4"
+              className="min-h-12 flex-1 border-none bg-transparent px-4 text-base shadow-none focus-visible:ring-0 sm:text-lg"
             />
 
-            <div className="h-8 w-px bg-white/10 hidden sm:block mx-2"></div>
+            <div className="mx-2 hidden h-8 w-px bg-violet-300/35 dark:bg-white/10 sm:block"></div>
 
             <div className="flex gap-2 w-full sm:w-auto px-2 pb-2 sm:pb-0">
               <button
                 type="button"
                 onClick={() => setIsPrivate(false)}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-2xl transition-all text-sm font-semibold ${!isPrivate ? 'bg-primary/20 text-primary ring-1 ring-primary/50 shadow-[0_0_15px_rgba(232,121,249,0.2)]' : 'text-muted-foreground hover:bg-white/5'}`}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-2xl transition-all text-sm font-semibold ${!isPrivate ? "bg-primary/20 text-primary ring-1 ring-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.22)]" : "text-muted-foreground hover:bg-accent/70 dark:hover:bg-white/5"}`}
               >
                 <GlobeIcon className="size-4" /> Public
               </button>
               <button
                 type="button"
                 onClick={() => setIsPrivate(true)}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-2xl transition-all text-sm font-semibold ${isPrivate ? 'bg-red-500/20 text-red-500 ring-1 ring-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'text-muted-foreground hover:bg-white/5'}`}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-2xl transition-all text-sm font-semibold ${isPrivate ? "bg-red-500/20 text-red-500 ring-1 ring-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]" : "text-muted-foreground hover:bg-accent/70 dark:hover:bg-white/5"}`}
               >
                 <LockIcon className="size-4" /> Private
               </button>
@@ -178,14 +185,14 @@ export default function HubPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Secret passcode..."
                 required={isPrivate}
-                className="w-full sm:w-40 min-h-12 bg-black/40 border-white/10 focus-visible:ring-red-500/50 transition-all rounded-2xl text-sm mb-2 sm:mb-0"
+                className="mb-2 w-full min-h-12 rounded-2xl border-violet-300/35 bg-white/78 text-sm transition-all focus-visible:ring-red-500/50 dark:border-white/10 dark:bg-black/40 sm:mb-0 sm:w-40"
               />
             )}
 
             <Button
               type="submit"
               disabled={isSubmitting || !title.trim()}
-              className={`w-full sm:w-auto min-h-[3.2rem] px-8 rounded-2xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all text-base font-bold ${isPrivate ? 'hover:shadow-[0_0_30px_rgba(239,68,68,0.4)] bg-red-600 hover:bg-red-500 text-white' : ''}`}
+              className={`w-full sm:w-auto min-h-[3.2rem] px-8 rounded-2xl shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all text-base font-bold ${isPrivate ? "hover:shadow-[0_0_30px_rgba(239,68,68,0.4)] bg-red-600 hover:bg-red-500 text-white" : ""}`}
             >
               {isSubmitting ? "Launching..." : "Launch"}
             </Button>
@@ -194,10 +201,14 @@ export default function HubPage() {
 
         {/* ACTIVE ROOMS GRID */}
         <section className="space-y-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-4 dark:border-white/5">
             <div>
-              <h3 className="text-3xl font-extrabold tracking-tight">Explore Rooms</h3>
-              <p className="text-sm text-muted-foreground mt-1 font-medium">Join an active session and watch together.</p>
+              <h3 className="text-3xl font-extrabold tracking-tight">
+                Explore Rooms
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1 font-medium">
+                Join an active session and watch together.
+              </p>
             </div>
             <div className="relative w-full sm:w-72">
               <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
@@ -205,7 +216,7 @@ export default function HubPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search sessions..."
-                className="pl-10 h-11 rounded-xl bg-black/20 border-white/10 focus-visible:ring-primary/40 text-sm"
+                className="h-11 rounded-xl border-border/70 bg-background/70 pl-10 text-sm focus-visible:ring-primary/40 dark:border-white/10 dark:bg-black/20"
               />
             </div>
           </div>
@@ -223,66 +234,92 @@ export default function HubPage() {
               </div>
             ) : null}
 
-            {!isLoadingRooms && filteredRooms.map((room) => (
-              <Card key={room.roomId} className={`glass-card border-white/10 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl`} onClick={() => router.push(`/room/join/${room.roomId}`)}>
-
-                {/* Visual Header */}
-                <div
-                  className="h-28 relative border-b border-white/5 bg-cover bg-center"
-                  style={{
-                    backgroundImage: extractYoutubeId(room.videoUrl)
-                      ? `url(https://img.youtube.com/vi/${extractYoutubeId(room.videoUrl)}/hqdefault.jpg)`
-                      : 'none',
-                  }}
+            {!isLoadingRooms &&
+              filteredRooms.map((room) => (
+                <Card
+                  key={room.roomId}
+                  className={`glass-card border-border/60 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl dark:border-white/10`}
+                  onClick={() => router.push(`/room/join/${room.roomId}`)}
                 >
-                  {/* Backdrop overlay for readability if map has video */}
-                  {extractYoutubeId(room.videoUrl) && (
-                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-all" />
-                  )}
-
-                  {!extractYoutubeId(room.videoUrl) && (
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
-                  )}
-
-                  <div className="absolute top-4 right-4 z-10">
-                    {room.isPrivate ? (
-                      <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-950/40 backdrop-blur-md gap-1 shadow-sm">
-                        <LockIcon className="size-3" /> Private
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-950/40 backdrop-blur-md gap-1 shadow-sm">
-                        <GlobeIcon className="size-3" /> Public
-                      </Badge>
+                  {/* Visual Header */}
+                  <div
+                    className="h-28 relative border-b border-border/50 bg-cover bg-center dark:border-white/5"
+                    style={{
+                      backgroundImage: extractYoutubeId(room.videoUrl)
+                        ? `url(https://img.youtube.com/vi/${extractYoutubeId(room.videoUrl)}/hqdefault.jpg)`
+                        : "none",
+                    }}
+                  >
+                    {/* Backdrop overlay for readability if map has video */}
+                    {extractYoutubeId(room.videoUrl) && (
+                      <div className="absolute inset-0 bg-slate-950/20 transition-all group-hover:bg-slate-950/10 dark:bg-black/20 dark:group-hover:bg-black/10" />
                     )}
-                  </div>
-                  <div className="absolute -bottom-5 left-5 w-12 h-12 rounded-2xl bg-card border border-white/10 shadow-lg flex items-center justify-center text-primary z-10">
-                    <MonitorPlayIcon className="size-5" />
-                  </div>
-                </div>
 
-                <CardContent className="p-5 flex-1 flex flex-col pt-8">
-                  <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">{room.title}</h3>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
-                    <UsersRoundIcon className="size-4 opacity-70" /> {room.memberCount} currently watching
-                  </div>
+                    {!extractYoutubeId(room.videoUrl) && (
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
+                    )}
 
-                  <div className="mt-auto pt-4 flex items-center justify-between border-t border-white/5">
-                    <div className="flex -space-x-2">
-                      {/* Decorative avatars */}
-                      {[...Array(Math.min(3, room.memberCount))].map((_, i) => (
-                        <div key={i} className="w-7 h-7 rounded-full border border-black bg-zinc-800 flex justify-center items-center text-[8px] text-zinc-400 shadow-sm z-10">👤</div>
-                      ))}
-                      {room.memberCount > 3 && (
-                        <div className="w-7 h-7 rounded-full border border-black bg-primary/20 flex justify-center items-center text-[9px] text-primary font-bold shadow-sm z-10">+{room.memberCount - 3}</div>
+                    <div className="absolute top-4 right-4 z-10">
+                      {room.isPrivate ? (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 border-red-500/30 bg-red-500/15 text-red-700 shadow-sm backdrop-blur-md dark:bg-red-950/40 dark:text-red-400"
+                        >
+                          <LockIcon className="size-3" /> Private
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 border-emerald-500/30 bg-emerald-500/15 text-emerald-700 shadow-sm backdrop-blur-md dark:bg-emerald-950/40 dark:text-emerald-400"
+                        >
+                          <GlobeIcon className="size-3" /> Public
+                        </Badge>
                       )}
                     </div>
-                    <Button size="sm" variant="secondary" className="glass-card bg-primary/10 hover:bg-primary/20 text-primary font-semibold rounded-xl group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(232,121,249,0.05)]">
-                      Join Party
-                    </Button>
+                    <div className="absolute -bottom-5 left-5 z-10 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-card shadow-lg text-primary dark:border-white/10">
+                      <MonitorPlayIcon className="size-5" />
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                  <CardContent className="p-5 flex-1 flex flex-col pt-8">
+                    <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                      {room.title}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
+                      <UsersRoundIcon className="size-4 opacity-70" />{" "}
+                      {room.memberCount} currently watching
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
+                      <div className="flex -space-x-2">
+                        {/* Decorative avatars */}
+                        {[...Array(Math.min(3, room.memberCount))].map(
+                          (_, i) => (
+                            <div
+                              key={i}
+                              className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-muted text-[8px] text-muted-foreground shadow-sm dark:border-black dark:bg-zinc-800 dark:text-zinc-400"
+                            >
+                              👤
+                            </div>
+                          ),
+                        )}
+                        {room.memberCount > 3 && (
+                          <div className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-primary/20 text-[9px] font-bold text-primary shadow-sm dark:border-black">
+                            +{room.memberCount - 3}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="glass-card bg-primary/10 hover:bg-primary/20 text-primary font-semibold rounded-xl group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(232,121,249,0.05)]"
+                      >
+                        Join Party
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
           </div>
         </section>
       </div>

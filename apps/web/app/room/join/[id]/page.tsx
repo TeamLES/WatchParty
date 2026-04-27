@@ -8,7 +8,11 @@ import type { GetRoomResponse } from "@watchparty/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default function JoinRoomPage({ params }: { params: Promise<{ id: string }> }) {
+export default function JoinRoomPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const unwrappedParams = use(params);
   const roomId = unwrappedParams.id;
   const router = useRouter();
@@ -48,7 +52,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
 
     // Require password for private rooms
     if (room?.isPrivate && !password?.trim()) {
-      alert('Heslo je vyžadované pre private roomu');
+      alert("Heslo je vyžadované pre private roomu");
       return;
     }
 
@@ -88,7 +92,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+      <div className="page-surface flex min-h-screen items-center justify-center text-foreground">
         <p className="animate-pulse">Checking access...</p>
       </div>
     );
@@ -96,15 +100,19 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
 
   if (!room) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
+      <div className="page-surface flex min-h-screen flex-col items-center justify-center gap-4 text-foreground">
         <p>Room not found.</p>
-        <Button asChild><button type="button" onClick={() => router.push("/hub")}>Back to Hub</button></Button>
+        <Button asChild>
+          <button type="button" onClick={() => router.push("/hub")}>
+            Back to Hub
+          </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(251,191,36,0.12),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(16,185,129,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.1),transparent_45%)] flex items-center justify-center font-sans text-foreground">
+    <div className="page-surface flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_30%),radial-gradient(circle_at_75%_20%,rgba(139,92,246,0.14),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(192,132,252,0.12),transparent_45%)] font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_75%_20%,rgba(139,92,246,0.16),transparent_38%),radial-gradient(circle_at_50%_80%,rgba(192,132,252,0.14),transparent_48%)]">
       <div className="glass-card w-full max-w-md p-8 rounded-[2rem] text-center space-y-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -z-10 h-32 w-32 rounded-full bg-primary/20 blur-[60px] pointer-events-none" />
 
@@ -113,8 +121,12 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
         </div>
 
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Joining Room</h1>
-          <p className="text-muted-foreground mt-2 font-medium break-all">ID: {roomId}</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">
+            Joining Room
+          </h1>
+          <p className="text-muted-foreground mt-2 font-medium break-all">
+            ID: {roomId}
+          </p>
         </div>
 
         <form onSubmit={handleJoin} className="space-y-5 pt-4">
@@ -129,7 +141,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-black/30 border-white/10 h-12 rounded-xl focus-visible:ring-red-500/50"
+                className="h-12 rounded-xl border-border/70 bg-background/72 focus-visible:ring-red-500/50 dark:border-white/10 dark:bg-black/30"
               />
             </div>
           )}
@@ -143,8 +155,14 @@ export default function JoinRoomPage({ params }: { params: Promise<{ id: string 
           </Button>
         </form>
 
-        <Button asChild variant="ghost" className="mt-4 hover:bg-white/10 h-10 w-full rounded-xl">
-          <button type="button" onClick={() => router.push("/hub")}>Cancel</button>
+        <Button
+          asChild
+          variant="ghost"
+          className="mt-4 h-10 w-full rounded-xl hover:bg-accent dark:hover:bg-white/10"
+        >
+          <button type="button" onClick={() => router.push("/hub")}>
+            Cancel
+          </button>
         </Button>
       </div>
     </div>

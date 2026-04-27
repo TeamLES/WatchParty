@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDownIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  LogOutIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -33,10 +39,17 @@ export function AuthenticatedUserMenu({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="h-9 rounded-full border border-white/10 bg-black/25 px-1.5 pr-1.5 backdrop-blur transition-colors hover:bg-white/10 sm:h-10 sm:pr-2.5"
-          aria-label={userLabel ? `Open account menu for ${userLabel}` : "Open account menu"}
+          className="h-9 rounded-full border border-violet-300/50 bg-white/72 px-1.5 pr-1.5 backdrop-blur transition-colors hover:bg-violet-100/85 dark:border-white/10 dark:bg-black/25 dark:hover:bg-white/10 sm:h-10 sm:pr-2.5"
+          aria-label={
+            userLabel
+              ? `Open account menu for ${userLabel}`
+              : "Open account menu"
+          }
         >
-          <Avatar size="sm" className="ring-1 ring-white/10">
+          <Avatar
+            size="sm"
+            className="ring-1 ring-violet-300/35 dark:ring-white/10"
+          >
             <AvatarFallback className="bg-primary/20 font-semibold text-primary">
               {initials}
             </AvatarFallback>
@@ -51,7 +64,7 @@ export function AuthenticatedUserMenu({
       <DropdownMenuContent
         align="end"
         sideOffset={8}
-        className="w-56 border-white/10 bg-black/80 backdrop-blur-2xl"
+        className="w-56 border-violet-300/50 bg-white/92 backdrop-blur-2xl dark:border-white/10 dark:bg-black/80"
       >
         {userLabel ? (
           <>
