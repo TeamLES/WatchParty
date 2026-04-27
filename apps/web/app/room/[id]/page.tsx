@@ -22,6 +22,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { SyncedYouTubePlayer } from "@/components/app/synced-youtube-player";
 
 // YouTube ID Extractor
 const extractYoutubeId = (url: string) => {
@@ -573,22 +574,11 @@ export default function RoomPage({
               ))}
             </div>
 
-            {activeVideoId ? (
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&rel=0&modestbranding=1`}
-                title="WatchParty Video Player"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              ></iframe>
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-                <MonitorPlayIcon className="size-16 mb-4 opacity-50" />
-                <p className="text-lg font-medium">Nothing playing right now</p>
-                <p className="text-sm">Host will start a video soon.</p>
-              </div>
-            )}
+            <SyncedYouTubePlayer
+              roomId={roomId}
+              videoId={activeVideoId}
+              isHost={canControlVideo}
+            />
           </div>
         </section>
 

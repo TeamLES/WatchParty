@@ -1,0 +1,855 @@
+import {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+} from "@aws-sdk/client-apigatewaymanagementapi";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import type {
+  APIGatewayAuthorizerResult,
+  APIGatewayProxyResultV2,
+  APIGatewayProxyWebsocketEventV2,
+} from "aws-lambda";
+
+type PlaybackState = "playing" | "paused";
+type PlaybackEventKind = "play" | "pause" | "seek" | "position";
+
+interface JoinRoomMessage {
+  action: "joinRoom";
+  roomId: string;
+}
+
+interface LeaveRoomMessage {
+  action: "leaveRoom";
+}
+
+interface SyncPlaybackMessage {
+  action: "syncPlayback";
+  roomId: string;
+  sequence: number;
+  eventType: PlaybackEventKind;
+  state: PlaybackState;
+  positionMs: number;
+  eventId: string;
+  sentAt: string;
+}
+
+interface GetPlaybackSnapshotMessage {
+  action: "getPlaybackSnapshot";
+  roomId: string;
+}
+
+interface PingMessage {
+  action: "ping";
+}
+
+type InboundMessage =
+  | JoinRoomMessage
+  | LeaveRoomMessage
+  | SyncPlaybackMessage
+  | GetPlaybackSnapshotMessage
+  | PingMessage
+  | Record<string, unknown>;
+
+interface ConnectionRecord {
+  connectionId: string;
+  userId: string;
+  roomId?: string;
+  connectedAt: string;
+  lastSeenAt: string;
+  expiresAt: number;
+}
+
+interface PlaybackSnapshotRecord {
+  roomId: string;
+  sequence: number;
+  eventType: PlaybackEventKind;
+  state: PlaybackState;
+  positionMs: number;
+  updatedByUserId: string;
+  updatedAt: string;
+  eventId: string;
+  sentAt: string;
+}
+
+interface WebSocketAuthorizerEvent {
+  methodArn: string;
+  queryStringParameters?: Record<string, string | undefined>;
+}
+
+interface TicketPayload {
+  sub: string;
+  iat: number;
+  exp: number;
+  nonce: string;
+}
+
+const region = process.env.AWS_REGION ?? "eu-central-1";
+const wsConnectionsTable =
+  process.env.DDB_WS_CONNECTIONS_TABLE ??
+  process.env.WS_CONNECTIONS_TABLE ??
+  "websocket-connections";
+const playbackSnapshotsTable =
+  process.env.DDB_PLAYBACK_SNAPSHOTS_TABLE ??
+  process.env.PLAYBACK_SNAPSHOTS_TABLE ??
+  "playback-snapshots";
+const roomsTable =
+  process.env.DDB_ROOMS_TABLE ?? process.env.ROOMS_TABLE ?? "rooms";
+const connectionTtlSeconds = Math.max(
+  Number(process.env.CONNECTION_TTL_SECONDS ?? "7200"),
+  60,
+);
+const useCustomDomain = process.env.WS_CUSTOM_DOMAIN === "true";
+const allowUnauthenticated = process.env.ALLOW_UNAUTHENTICATED_WS === "true";
+
+const ddbDocClient = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region }),
+  { marshallOptions: { removeUndefinedValues: true } },
+);
+
+function response(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
+  return {
+    statusCode,
+    body: JSON.stringify(body),
+  };
+}
+
+function parseBody(event: APIGatewayProxyWebsocketEventV2): InboundMessage {
+  if (!event.body) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(event.body) as InboundMessage;
+  } catch {
+    return {};
+  }
+}
+
+function getWsEndpoint(event: APIGatewayProxyWebsocketEventV2): string {
+  const domain = event.requestContext.domainName;
+  const stage = event.requestContext.stage;
+  return useCustomDomain ? `https://${domain}` : `https://${domain}/${stage}`;
+}
+
+function wsClient(
+  event: APIGatewayProxyWebsocketEventV2,
+): ApiGatewayManagementApiClient {
+  return new ApiGatewayManagementApiClient({ endpoint: getWsEndpoint(event) });
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function nowEpochSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function senderUserId(event: APIGatewayProxyWebsocketEventV2): string | null {
+  const requestContext = event.requestContext as typeof event.requestContext & {
+    authorizer?: { userId?: unknown; principalId?: unknown };
+  };
+  const queryStringParameters = (
+    event as APIGatewayProxyWebsocketEventV2 & {
+      queryStringParameters?: Record<string, string | undefined>;
+    }
+  ).queryStringParameters;
+  const authorizer = requestContext.authorizer as
+    | { userId?: unknown; principalId?: unknown }
+    | undefined;
+  const authorizerUserId =
+    readString(authorizer?.userId) ?? readString(authorizer?.principalId);
+
+  if (authorizerUserId) {
+    return authorizerUserId;
+  }
+
+  if (allowUnauthenticated) {
+    return (
+      readString(queryStringParameters?.userId) ??
+      `guest-${event.requestContext.connectionId}`
+    );
+  }
+
+  return null;
+}
+
+function isPlaybackState(value: unknown): value is PlaybackState {
+  return value === "playing" || value === "paused";
+}
+
+function isPlaybackEventKind(value: unknown): value is PlaybackEventKind {
+  return (
+    value === "play" ||
+    value === "pause" ||
+    value === "seek" ||
+    value === "position"
+  );
+}
+
+function isGoneError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const maybeError = error as {
+    name?: string;
+    $metadata?: { httpStatusCode?: number };
+    statusCode?: number;
+  };
+
+  return (
+    maybeError.name === "GoneException" ||
+    maybeError.$metadata?.httpStatusCode === 410 ||
+    maybeError.statusCode === 410
+  );
+}
+
+function isConditionalCheckFailed(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "ConditionalCheckFailedException"
+  );
+}
+
+function validateRoomId(roomId: unknown): string | null {
+  const value = readString(roomId);
+  if (!value || !/^[a-z0-9]{16}$/i.test(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function validateSyncPayload(
+  body: Partial<SyncPlaybackMessage>,
+): SyncPlaybackMessage | null {
+  const roomId = validateRoomId(body.roomId);
+  const eventId = readString(body.eventId);
+  const sentAt = readString(body.sentAt) ?? nowIso();
+
+  if (
+    !roomId ||
+    !Number.isSafeInteger(body.sequence) ||
+    body.sequence < 1 ||
+    !isPlaybackEventKind(body.eventType) ||
+    !isPlaybackState(body.state) ||
+    typeof body.positionMs !== "number" ||
+    !Number.isFinite(body.positionMs) ||
+    body.positionMs < 0 ||
+    !eventId
+  ) {
+    return null;
+  }
+
+  return {
+    action: "syncPlayback",
+    roomId,
+    sequence: body.sequence,
+    eventType: body.eventType,
+    state: body.state,
+    positionMs: Math.round(body.positionMs),
+    eventId,
+    sentAt,
+  };
+}
+
+async function getConnection(
+  connectionId: string,
+): Promise<ConnectionRecord | null> {
+  const response = await ddbDocClient.send(
+    new GetCommand({
+      TableName: wsConnectionsTable,
+      Key: { connectionId },
+    }),
+  );
+
+  return (response.Item ?? null) as ConnectionRecord | null;
+}
+
+async function getRoom(
+  roomId: string,
+): Promise<Record<string, unknown> | null> {
+  const response = await ddbDocClient.send(
+    new GetCommand({
+      TableName: roomsTable,
+      Key: { roomId },
+    }),
+  );
+
+  return (response.Item ?? null) as Record<string, unknown> | null;
+}
+
+async function getLatestSnapshot(
+  roomId: string,
+): Promise<PlaybackSnapshotRecord | null> {
+  const response = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: playbackSnapshotsTable,
+      KeyConditionExpression: "roomId = :roomId",
+      ExpressionAttributeValues: {
+        ":roomId": roomId,
+      },
+      ScanIndexForward: false,
+      Limit: 1,
+    }),
+  );
+
+  return (response.Items?.[0] ?? null) as PlaybackSnapshotRecord | null;
+}
+
+async function hasPlaybackEventId(
+  roomId: string,
+  eventId: string,
+): Promise<boolean> {
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const response = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: playbackSnapshotsTable,
+        KeyConditionExpression: "roomId = :roomId",
+        FilterExpression: "eventId = :eventId",
+        ExpressionAttributeValues: {
+          ":roomId": roomId,
+          ":eventId": eventId,
+        },
+        ProjectionExpression: "eventId",
+        ExclusiveStartKey: lastEvaluatedKey,
+      }),
+    );
+
+    if ((response.Items ?? []).length > 0) {
+      return true;
+    }
+
+    lastEvaluatedKey = response.LastEvaluatedKey as
+      | Record<string, unknown>
+      | undefined;
+  } while (lastEvaluatedKey);
+
+  return false;
+}
+
+async function listConnectionsByRoom(
+  roomId: string,
+): Promise<ConnectionRecord[]> {
+  const connections: ConnectionRecord[] = [];
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const response = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: wsConnectionsTable,
+        IndexName: "room-index",
+        KeyConditionExpression: "roomId = :roomId",
+        ExpressionAttributeValues: {
+          ":roomId": roomId,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      }),
+    );
+
+    connections.push(...((response.Items ?? []) as ConnectionRecord[]));
+    lastEvaluatedKey = response.LastEvaluatedKey as
+      | Record<string, unknown>
+      | undefined;
+  } while (lastEvaluatedKey);
+
+  return connections;
+}
+
+async function sendToConnection(
+  apiClient: ApiGatewayManagementApiClient,
+  connectionId: string,
+  payload: unknown,
+): Promise<boolean> {
+  try {
+    await apiClient.send(
+      new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: Buffer.from(JSON.stringify(payload)),
+      }),
+    );
+    return true;
+  } catch (error) {
+    if (isGoneError(error)) {
+      await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: wsConnectionsTable,
+          Key: { connectionId },
+        }),
+      );
+      return false;
+    }
+
+    console.error("postToConnection failed", { connectionId, error });
+    return false;
+  }
+}
+
+async function broadcastToRoom(
+  event: APIGatewayProxyWebsocketEventV2,
+  roomId: string,
+  payload: unknown,
+  excludeConnectionId?: string,
+): Promise<number> {
+  const apiClient = wsClient(event);
+  const connections = await listConnectionsByRoom(roomId);
+  let delivered = 0;
+
+  for (const connection of connections) {
+    if (connection.connectionId === excludeConnectionId) {
+      continue;
+    }
+
+    const didDeliver = await sendToConnection(
+      apiClient,
+      connection.connectionId,
+      payload,
+    );
+
+    if (didDeliver) {
+      delivered += 1;
+    }
+  }
+
+  return delivered;
+}
+
+async function broadcastPresence(
+  event: APIGatewayProxyWebsocketEventV2,
+  roomId: string,
+): Promise<void> {
+  const connections = await listConnectionsByRoom(roomId);
+
+  await broadcastToRoom(event, roomId, {
+    type: "presence.updated",
+    roomId,
+    onlineCount: connections.length,
+    updatedAt: nowIso(),
+  });
+}
+
+function toSnapshotEvent(snapshot: PlaybackSnapshotRecord) {
+  return {
+    type: "playback.snapshot",
+    roomId: snapshot.roomId,
+    sequence: snapshot.sequence,
+    state: snapshot.state,
+    positionMs: snapshot.positionMs,
+    updatedByUserId: snapshot.updatedByUserId,
+    updatedAt: snapshot.updatedAt,
+    eventId: snapshot.eventId,
+  };
+}
+
+function defaultSnapshot(roomId: string) {
+  return {
+    type: "playback.snapshot",
+    roomId,
+    sequence: 0,
+    state: "paused",
+    positionMs: 0,
+    updatedByUserId: "system",
+    updatedAt: nowIso(),
+    eventId: "initial",
+  };
+}
+
+async function onConnect(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+  const userId = senderUserId(event);
+
+  if (!userId) {
+    return response(401, { message: "Unauthorized WebSocket connection" });
+  }
+
+  const connectedAt = nowIso();
+
+  await ddbDocClient.send(
+    new PutCommand({
+      TableName: wsConnectionsTable,
+      Item: {
+        connectionId,
+        userId,
+        connectedAt,
+        lastSeenAt: connectedAt,
+        expiresAt: nowEpochSeconds() + connectionTtlSeconds,
+      },
+    }),
+  );
+
+  return response(200, { ok: true, route: "$connect" });
+}
+
+async function onDisconnect(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+  const connection = await getConnection(connectionId);
+
+  await ddbDocClient.send(
+    new DeleteCommand({
+      TableName: wsConnectionsTable,
+      Key: { connectionId },
+    }),
+  );
+
+  if (connection?.roomId) {
+    await broadcastPresence(event, connection.roomId);
+  }
+
+  return response(200, { ok: true, route: "$disconnect" });
+}
+
+async function onJoinRoom(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+  const body = parseBody(event) as Partial<JoinRoomMessage>;
+  const roomId = validateRoomId(body.roomId);
+
+  if (!roomId) {
+    return response(400, { message: "roomId is required" });
+  }
+
+  const room = await getRoom(roomId);
+  if (!room) {
+    return response(404, { message: "Room not found" });
+  }
+
+  await ddbDocClient.send(
+    new UpdateCommand({
+      TableName: wsConnectionsTable,
+      Key: { connectionId },
+      UpdateExpression:
+        "SET roomId = :roomId, lastSeenAt = :lastSeenAt, expiresAt = :expiresAt",
+      ExpressionAttributeValues: {
+        ":roomId": roomId,
+        ":lastSeenAt": nowIso(),
+        ":expiresAt": nowEpochSeconds() + connectionTtlSeconds,
+      },
+      ConditionExpression: "attribute_exists(connectionId)",
+    }),
+  );
+
+  const latestSnapshot = await getLatestSnapshot(roomId);
+  await sendToConnection(
+    wsClient(event),
+    connectionId,
+    latestSnapshot ? toSnapshotEvent(latestSnapshot) : defaultSnapshot(roomId),
+  );
+  await broadcastPresence(event, roomId);
+
+  return response(200, { ok: true, route: "joinRoom" });
+}
+
+async function onLeaveRoom(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+  const connection = await getConnection(connectionId);
+
+  await ddbDocClient.send(
+    new UpdateCommand({
+      TableName: wsConnectionsTable,
+      Key: { connectionId },
+      UpdateExpression: "REMOVE roomId SET lastSeenAt = :lastSeenAt",
+      ExpressionAttributeValues: {
+        ":lastSeenAt": nowIso(),
+      },
+      ConditionExpression: "attribute_exists(connectionId)",
+    }),
+  );
+
+  if (connection?.roomId) {
+    await broadcastPresence(event, connection.roomId);
+  }
+
+  return response(200, { ok: true, route: "leaveRoom" });
+}
+
+async function onPing(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+
+  await ddbDocClient.send(
+    new UpdateCommand({
+      TableName: wsConnectionsTable,
+      Key: { connectionId },
+      UpdateExpression: "SET lastSeenAt = :lastSeenAt, expiresAt = :expiresAt",
+      ExpressionAttributeValues: {
+        ":lastSeenAt": nowIso(),
+        ":expiresAt": nowEpochSeconds() + connectionTtlSeconds,
+      },
+      ConditionExpression: "attribute_exists(connectionId)",
+    }),
+  );
+
+  return response(200, { ok: true, route: "ping" });
+}
+
+async function onGetPlaybackSnapshot(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const connectionId = event.requestContext.connectionId;
+  const body = parseBody(event) as Partial<GetPlaybackSnapshotMessage>;
+  const roomId = validateRoomId(body.roomId);
+
+  if (!roomId) {
+    return response(400, { message: "roomId is required" });
+  }
+
+  const latestSnapshot = await getLatestSnapshot(roomId);
+  await sendToConnection(
+    wsClient(event),
+    connectionId,
+    latestSnapshot ? toSnapshotEvent(latestSnapshot) : defaultSnapshot(roomId),
+  );
+
+  return response(200, { ok: true, route: "getPlaybackSnapshot" });
+}
+
+async function onSyncPlayback(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const body = validateSyncPayload(
+    parseBody(event) as Partial<SyncPlaybackMessage>,
+  );
+  const connectionId = event.requestContext.connectionId;
+  const updatedByUserId = senderUserId(event);
+
+  if (!body || !updatedByUserId) {
+    return response(400, { message: "Invalid syncPlayback payload" });
+  }
+
+  const [connection, room] = await Promise.all([
+    getConnection(connectionId),
+    getRoom(body.roomId),
+  ]);
+
+  if (!room) {
+    return response(404, { message: "Room not found" });
+  }
+
+  if (room.hostUserId !== updatedByUserId) {
+    return response(403, { message: "Only the room host can sync playback" });
+  }
+
+  if (connection?.roomId !== body.roomId) {
+    return response(403, { message: "Connection has not joined this room" });
+  }
+
+  const latestSnapshot = await getLatestSnapshot(body.roomId);
+  if (latestSnapshot && latestSnapshot.sequence >= body.sequence) {
+    return response(409, { message: "Stale playback sequence" });
+  }
+
+  if (await hasPlaybackEventId(body.roomId, body.eventId)) {
+    return response(409, { message: "Duplicate playback event" });
+  }
+
+  const updatedAt = nowIso();
+  const snapshot: PlaybackSnapshotRecord = {
+    roomId: body.roomId,
+    sequence: body.sequence,
+    eventType: body.eventType,
+    state: body.state,
+    positionMs: body.positionMs,
+    updatedByUserId,
+    updatedAt,
+    eventId: body.eventId,
+    sentAt: body.sentAt,
+  };
+
+  try {
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: playbackSnapshotsTable,
+        Item: snapshot,
+        ConditionExpression:
+          "attribute_not_exists(roomId) AND attribute_not_exists(#sequence)",
+        ExpressionAttributeNames: {
+          "#sequence": "sequence",
+        },
+      }),
+    );
+  } catch (error) {
+    if (isConditionalCheckFailed(error)) {
+      return response(409, { message: "Duplicate playback sequence" });
+    }
+
+    throw error;
+  }
+
+  const outboundPayload = {
+    type: "playback.sync",
+    roomId: snapshot.roomId,
+    sequence: snapshot.sequence,
+    eventType: snapshot.eventType,
+    state: snapshot.state,
+    positionMs: snapshot.positionMs,
+    updatedByUserId: snapshot.updatedByUserId,
+    updatedAt: snapshot.updatedAt,
+    eventId: snapshot.eventId,
+    sentAt: snapshot.sentAt,
+  };
+
+  const delivered = await broadcastToRoom(
+    event,
+    body.roomId,
+    outboundPayload,
+    connectionId,
+  );
+
+  return response(200, { ok: true, route: "syncPlayback", delivered });
+}
+
+export async function handler(
+  event: APIGatewayProxyWebsocketEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const routeKey = event.requestContext.routeKey;
+
+  try {
+    switch (routeKey) {
+      case "$connect":
+        return await onConnect(event);
+      case "$disconnect":
+        return await onDisconnect(event);
+      case "joinRoom":
+        return await onJoinRoom(event);
+      case "leaveRoom":
+        return await onLeaveRoom(event);
+      case "syncPlayback":
+        return await onSyncPlayback(event);
+      case "getPlaybackSnapshot":
+        return await onGetPlaybackSnapshot(event);
+      case "ping":
+        return await onPing(event);
+      case "$default":
+      default:
+        return response(200, {
+          ok: true,
+          route: routeKey,
+          message: "No-op route",
+        });
+    }
+  } catch (error) {
+    console.error("ws-handler-error", { routeKey, error });
+    return response(500, { message: "Internal server error", route: routeKey });
+  }
+}
+
+function base64UrlEncode(value: string): string {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlDecode(value: string): string {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function signTicketPayload(encodedPayload: string): string {
+  const secret = process.env.WS_TICKET_SECRET;
+
+  if (!secret) {
+    throw new Error("WS_TICKET_SECRET is required for WebSocket auth");
+  }
+
+  return createHmac("sha256", secret)
+    .update(encodedPayload)
+    .digest("base64url");
+}
+
+function verifyTicket(token: string | undefined): TicketPayload | null {
+  if (!token) {
+    return null;
+  }
+
+  const [encodedPayload, signature] = token.split(".");
+  if (!encodedPayload || !signature) {
+    return null;
+  }
+
+  const expectedSignature = signTicketPayload(encodedPayload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(
+      base64UrlDecode(encodedPayload),
+    ) as TicketPayload;
+    const now = nowEpochSeconds();
+
+    if (!payload.sub || !payload.exp || payload.exp < now) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function buildPolicy(
+  principalId: string,
+  effect: "Allow" | "Deny",
+  resource: string,
+  context: Record<string, string> = {},
+): APIGatewayAuthorizerResult {
+  return {
+    principalId,
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Effect: effect,
+          Resource: resource,
+        },
+      ],
+    },
+    context,
+  };
+}
+
+export async function authorizer(
+  event: WebSocketAuthorizerEvent,
+): Promise<APIGatewayAuthorizerResult> {
+  const token = event.queryStringParameters?.ticket;
+  const payload = verifyTicket(token);
+
+  if (!payload) {
+    return buildPolicy(`denied-${randomUUID()}`, "Deny", event.methodArn);
+  }
+
+  return buildPolicy(payload.sub, "Allow", event.methodArn, {
+    userId: payload.sub,
+  });
+}
