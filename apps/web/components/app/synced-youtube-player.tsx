@@ -40,6 +40,7 @@ interface SyncedYouTubePlayerProps {
   roomId: string;
   videoId: string | null;
   isHost: boolean;
+  onOnlineCountChange?: (onlineCount: number | null) => void;
 }
 
 interface YouTubePlayerEvent {
@@ -177,6 +178,7 @@ export function SyncedYouTubePlayer({
   roomId,
   videoId,
   isHost,
+  onOnlineCountChange,
 }: SyncedYouTubePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerMountRef = useRef<HTMLDivElement>(null);
@@ -435,6 +437,7 @@ export function SyncedYouTubePlayer({
 
       if (message.type === "presence.updated" && message.roomId === roomId) {
         setOnlineCount(message.onlineCount);
+        onOnlineCountChange?.(message.onlineCount);
         return;
       }
 
@@ -447,7 +450,7 @@ export function SyncedYouTubePlayer({
         applyRemotePlayback(message);
       }
     },
-    [applyRemotePlayback, roomId],
+    [applyRemotePlayback, onOnlineCountChange, roomId],
   );
 
   useEffect(() => {
@@ -505,6 +508,8 @@ export function SyncedYouTubePlayer({
           }
 
           setSocketStatus("connecting");
+          setOnlineCount(null);
+          onOnlineCountChange?.(null);
           reconnectTimerRef.current = window.setTimeout(connect, 2500);
         };
       } catch (error) {
@@ -535,7 +540,7 @@ export function SyncedYouTubePlayer({
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [handleSocketEvent, roomId, sendSocketMessage]);
+  }, [handleSocketEvent, onOnlineCountChange, roomId, sendSocketMessage]);
 
   useEffect(() => {
     const mount = playerMountRef.current;

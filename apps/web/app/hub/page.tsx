@@ -17,6 +17,11 @@ import { Badge } from "@/components/ui/badge";
 import type { RoomSummaryResponse } from "@watchparty/shared-types";
 import { extractYoutubeId } from "@/lib/youtube";
 
+type RoomActivityFilter = "all" | "active" | "empty";
+
+const getWatchingCount = (room: RoomSummaryResponse) =>
+  room.onlineCount ?? 0;
+
 export default function HubPage() {
   const router = useRouter();
   const [rooms, setRooms] = useState<RoomSummaryResponse[]>([]);
@@ -71,10 +76,30 @@ export default function HubPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activityFilter, setActivityFilter] =
+    useState<RoomActivityFilter>("all");
 
-  const filteredRooms = rooms.filter((room) =>
+  const searchedRooms = rooms.filter((room) =>
     room.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const filteredRooms = searchedRooms.filter((room) => {
+    const watchingCount = getWatchingCount(room);
+
+    if (activityFilter === "active") {
+      return watchingCount > 0;
+    }
+
+    if (activityFilter === "empty") {
+      return watchingCount === 0;
+    }
+
+    return true;
+  });
+  const activityFilters: { label: string; value: RoomActivityFilter }[] = [
+    { label: "All", value: "all" },
+    { label: "Active", value: "active" },
+    { label: "Empty", value: "empty" },
+  ];
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,14 +224,32 @@ export default function HubPage() {
                 Join an active session and watch together.
               </p>
             </div>
-            <div className="relative w-full sm:w-72">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search sessions..."
-                className="h-11 rounded-xl border-border/70 bg-background/70 pl-10 text-sm focus-visible:ring-primary/40 dark:border-white/10 dark:bg-black/20"
-              />
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+              <div className="flex rounded-xl border border-border/70 bg-background/70 p-1 dark:border-white/10 dark:bg-black/20">
+                {activityFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setActivityFilter(filter.value)}
+                    className={`h-9 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                      activityFilter === filter.value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-accent/70 hover:text-foreground dark:hover:bg-white/10"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative w-full sm:w-72">
+                <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search sessions..."
+                  className="h-11 rounded-xl border-border/70 bg-background/70 pl-10 text-sm focus-visible:ring-primary/40 dark:border-white/10 dark:bg-black/20"
+                />
+              </div>
             </div>
           </div>
 
@@ -224,7 +267,10 @@ export default function HubPage() {
             ) : null}
 
             {!isLoadingRooms &&
-              filteredRooms.map((room) => (
+              filteredRooms.map((room) => {
+                const watchingCount = getWatchingCount(room);
+
+                return (
                 <Card
                   key={room.roomId}
                   className={`glass-card border-border/60 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl dark:border-white/10`}
@@ -276,13 +322,15 @@ export default function HubPage() {
                     </h3>
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
                       <UsersRoundIcon className="size-4 opacity-70" />{" "}
-                      {room.memberCount} currently watching
+                      {watchingCount === 0
+                        ? "No one watching"
+                        : `${watchingCount} watching`}
                     </div>
 
                     <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
                       <div className="flex -space-x-2">
                         {/* Decorative avatars */}
-                        {[...Array(Math.min(3, room.memberCount))].map(
+                        {[...Array(Math.min(3, watchingCount))].map(
                           (_, i) => (
                             <div
                               key={i}
@@ -292,9 +340,9 @@ export default function HubPage() {
                             </div>
                           ),
                         )}
-                        {room.memberCount > 3 && (
+                        {watchingCount > 3 && (
                           <div className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-primary/20 text-[9px] font-bold text-primary shadow-sm dark:border-black">
-                            +{room.memberCount - 3}
+                            +{watchingCount - 3}
                           </div>
                         )}
                       </div>
@@ -308,7 +356,8 @@ export default function HubPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
           </div>
         </section>
       </div>

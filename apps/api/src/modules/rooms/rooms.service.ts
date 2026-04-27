@@ -18,6 +18,7 @@ import type {
   RoomMemberResponse,
   RoomSummaryResponse,
 } from '@watchparty/shared-types';
+import { RealtimePresenceService } from '../realtime/realtime-presence.service';
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
 import type { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import type { CreateRoomDto } from './dto/create-room.dto';
@@ -38,6 +39,7 @@ export class RoomsService {
   constructor(
     @Inject(ROOMS_REPOSITORY)
     private readonly roomsRepository: RoomsRepository,
+    private readonly realtimePresenceService: RealtimePresenceService,
   ) {
     this.logger.log(
       `initialized repository=${this.roomsRepository.constructor.name}`,
@@ -97,7 +99,7 @@ export class RoomsService {
           `createRoom success roomId=${room.roomId} host=${userId}`,
         );
 
-        return this.toRoomSummaryResponse(room, 1);
+        return this.toRoomSummaryResponse(room, 1, null);
       } catch (error) {
         if (error instanceof RoomAlreadyExistsError && attempt < maxAttempts) {
           this.logger.warn(
@@ -181,10 +183,12 @@ export class RoomsService {
 
     const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
-        const memberCount = await this.roomsRepository.countMembers(
-          room.roomId,
-        );
-        return this.toRoomSummaryResponse(room, memberCount);
+        const [memberCount, onlineCount] = await Promise.all([
+          this.roomsRepository.countMembers(room.roomId),
+          this.realtimePresenceService.countOnlineByRoom(room.roomId),
+        ]);
+
+        return this.toRoomSummaryResponse(room, memberCount, onlineCount);
       }),
     );
 
@@ -194,13 +198,16 @@ export class RoomsService {
   async getRoom(roomId: string, userId: string): Promise<GetRoomResponse> {
     this.logger.log(`getRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
-    const members = await this.roomsRepository.getMembersByRoomId(roomId);
+    const [members, onlineCount] = await Promise.all([
+      this.roomsRepository.getMembersByRoomId(roomId),
+      this.realtimePresenceService.countOnlineByRoom(roomId),
+    ]);
     const memberCount = members.length;
     const isHost = room.hostUserId === userId;
     const isMember = members.some((member) => member.userId === userId);
 
     return {
-      ...this.toRoomSummaryResponse(room, memberCount),
+      ...this.toRoomSummaryResponse(room, memberCount, onlineCount),
       members: members.map((member) => this.toRoomMemberResponse(member)),
       isHost,
       isMember,
@@ -395,6 +402,7 @@ export class RoomsService {
   private toRoomSummaryResponse(
     room: Room,
     memberCount: number,
+    onlineCount: number | null,
   ): RoomSummaryResponse {
     return {
       roomId: room.roomId,
@@ -404,6 +412,7 @@ export class RoomsService {
       password: room.password ?? null,
       hostUserId: room.hostUserId,
       memberCount,
+      onlineCount,
       status: room.status,
       createdAt: room.createdAt,
     };

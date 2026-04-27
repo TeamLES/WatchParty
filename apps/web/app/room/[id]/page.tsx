@@ -85,6 +85,7 @@ export default function RoomPage({
   const [editTitle, setEditTitle] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
+  const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
@@ -418,6 +419,7 @@ export default function RoomPage({
 
   // If API does not send isHost yet, keep controls available instead of hiding the input.
   const canControlVideo = typeof room.isHost === "boolean" ? room.isHost : true;
+  const watchingCount = liveOnlineCount ?? room.onlineCount ?? 0;
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
@@ -451,7 +453,7 @@ export default function RoomPage({
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      {room.memberCount} watching now
+                      {watchingCount} watching now
                     </p>
                     {!canControlVideo && (
                       <span className="rounded bg-accent/55 px-1.5 text-[11px] text-muted-foreground/90 dark:bg-white/5 dark:text-muted-foreground/80">
@@ -556,6 +558,7 @@ export default function RoomPage({
               roomId={roomId}
               videoId={activeVideoId}
               isHost={canControlVideo}
+              onOnlineCountChange={setLiveOnlineCount}
             />
           </div>
         </section>

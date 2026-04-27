@@ -17,6 +17,7 @@ export interface RoomSummaryResponse {
   password: string | null;
   hostUserId: string;
   memberCount: number;
+  onlineCount?: number | null;
   status: RoomStatus;
   createdAt: string;
 }

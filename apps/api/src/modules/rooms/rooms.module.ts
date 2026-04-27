@@ -6,6 +6,7 @@ import {
   resolveDynamoDbTableNames,
 } from '../../common/dynamodb/dynamodb-table-names';
 import { AuthModule } from '../auth/auth.module';
+import { RealtimePresenceService } from '../realtime/realtime-presence.service';
 import {
   normalizeRoomsRepositoryDriver,
   ROOMS_REPOSITORY,
@@ -21,6 +22,7 @@ import { RoomsService } from './rooms.service';
   controllers: [RoomsController],
   providers: [
     RoomsService,
+    RealtimePresenceService,
     InMemoryRoomsRepository,
     DynamoDBRoomsRepository,
     {
