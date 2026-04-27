@@ -1,6 +1,6 @@
 export type { User } from "./users.js";
 
-export type { Room, RoomStatus } from "./rooms.js";
+export type { Room, RoomStatus, RoomVisibilityStatus } from "./rooms.js";
 export type { RoomMember, RoomMemberRole } from "./room-members.js";
 export type { Invite } from "./invites.js";
 

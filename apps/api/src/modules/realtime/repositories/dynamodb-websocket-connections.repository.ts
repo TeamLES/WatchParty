@@ -13,16 +13,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import type { WebSocketConnection } from '@watchparty/shared-types/tables';
+
+import { getErrorName } from '../../../common/aws/aws-errors';
 import { requireDynamoDbTableNames } from '../../../common/dynamodb/dynamodb-table-names';
 
-export interface WebsocketConnectionRecord {
-  connectionId: string;
-  userId: string;
-  roomId?: string;
-  connectedAt: string;
-  lastSeenAt: string;
-  expiresAt: number;
-}
+export type WebsocketConnectionRecord = WebSocketConnection;
 
 @Injectable()
 export class DynamoDbWebsocketConnectionsRepository {
@@ -196,13 +192,4 @@ export class DynamoDbWebsocketConnectionsRepository {
         `DynamoDB request failed during ${operation}.`,
       );
   }
-}
-
-function getErrorName(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object' || !('name' in error)) {
-    return undefined;
-  }
-
-  const value = (error as { name: unknown }).name;
-  return typeof value === 'string' ? value : undefined;
 }

@@ -25,16 +25,15 @@ import {
 } from "lucide-react";
 import type {
   PlaybackEventKind,
+  PlaybackState,
   PlaybackSnapshotEvent,
   PlaybackSyncEvent,
   WatchPartyOutboundWebSocketEvent,
   WebSocketTicketResponse,
-  WatchPartyPlaybackState,
 } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 
-type PlaybackState = WatchPartyPlaybackState;
 type SocketStatus = "idle" | "connecting" | "connected" | "unavailable";
 
 interface SyncedYouTubePlayerProps {

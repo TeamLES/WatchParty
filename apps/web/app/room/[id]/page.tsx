@@ -23,15 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { SyncedYouTubePlayer } from "@/components/app/synced-youtube-player";
-
-// YouTube ID Extractor
-const extractYoutubeId = (url: string) => {
-  if (!url) return null;
-  const regExp =
-    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
-};
+import { extractYoutubeId } from "@/lib/youtube";
 
 // Hardcoded mock messages
 const INITAL_MESSAGES = [

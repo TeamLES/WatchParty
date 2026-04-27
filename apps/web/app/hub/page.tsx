@@ -15,14 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { RoomSummaryResponse } from "@watchparty/shared-types";
-
-const extractYoutubeId = (url: string | null) => {
-  if (!url) return null;
-  const regExp =
-    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
-};
+import { extractYoutubeId } from "@/lib/youtube";
 
 export default function HubPage() {
   const router = useRouter();
@@ -89,10 +82,10 @@ export default function HubPage() {
 
     try {
       const payload: { title: string; isPrivate: boolean; password?: string } =
-        {
-          title,
-          isPrivate,
-        };
+      {
+        title,
+        isPrivate,
+      };
 
       if (isPrivate && password) {
         payload.password = password;
@@ -111,11 +104,11 @@ export default function HubPage() {
         return;
       }
 
-        const data = await res.json();
+      const data = await res.json();
 
-        // By user requirement, ALWAYS ask for password, even for the host.
-        // Bypassing directly to the room is removed.
-        router.push(`/room/join/${data.roomId}`);
+      // By user requirement, ALWAYS ask for password, even for the host.
+      // Bypassing directly to the room is removed.
+      router.push(`/room/join/${data.roomId}`);
     } catch (error) {
       console.error("Failed to create room", error);
     } finally {

@@ -151,4 +151,4 @@ async function bootstrap() {
 
   await app.listen(appPort);
 }
-bootstrap();
+void bootstrap();

@@ -67,4 +67,4 @@ import { RoomsService } from './rooms.service';
   ],
   exports: [RoomsService, ROOMS_REPOSITORY],
 })
-export class RoomsModule { }
+export class RoomsModule {}

@@ -1,9 +1,9 @@
 export interface Invite {
   inviteCode: string;
-  roomId: string;
-  createdByUserId: string;
   createdAt: string;
+  createdByUserId: string;
   expiresAt?: number;
   maxUses?: number;
+  roomId: string;
   usedCount?: number;
 }

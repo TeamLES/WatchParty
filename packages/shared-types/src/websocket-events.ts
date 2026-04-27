@@ -2,7 +2,7 @@ import type {
   PlaybackEventKind,
   PlaybackState,
 } from "./tables/playback-snapshots.js";
-export type { PlaybackEventKind } from "./tables/playback-snapshots.js";
+export type { PlaybackEventKind, PlaybackState } from "./tables/playback-snapshots.js";
 
 export interface JoinRoomMessage {
   action: "joinRoom";

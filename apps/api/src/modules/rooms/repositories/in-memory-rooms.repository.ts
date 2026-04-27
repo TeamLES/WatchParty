@@ -20,7 +20,7 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     this.logger.log('driver=inmemory initialized');
   }
 
-  async createRoom(room: Room): Promise<Room> {
+  createRoom(room: Room): Promise<Room> {
     this.logger.log(
       `createRoom roomId=${room.roomId} hostUserId=${room.hostUserId}`,
     );
@@ -40,20 +40,20 @@ export class InMemoryRoomsRepository implements RoomsRepository {
       this.invitesByRoomId.set(room.roomId, new Map<string, RoomInvite>());
     }
 
-    return this.cloneRoom(room);
+    return Promise.resolve(this.cloneRoom(room));
   }
 
-  async updateRoom(room: Room): Promise<Room> {
+  updateRoom(room: Room): Promise<Room> {
     this.logger.log(`updateRoom roomId=${room.roomId}`);
     if (!this.roomsById.has(room.roomId)) {
       throw new Error(`Room with roomId ${room.roomId} does not exist`);
     }
 
     this.roomsById.set(room.roomId, this.cloneRoom(room));
-    return this.cloneRoom(room);
+    return Promise.resolve(this.cloneRoom(room));
   }
 
-  async deleteRoom(roomId: string): Promise<void> {
+  deleteRoom(roomId: string): Promise<void> {
     this.logger.log(`deleteRoom roomId=${roomId}`);
     this.roomsById.delete(roomId);
     this.membersByRoomId.delete(roomId);
@@ -65,26 +65,30 @@ export class InMemoryRoomsRepository implements RoomsRepository {
       }
     }
     this.invitesByRoomId.delete(roomId);
+
+    return Promise.resolve();
   }
 
-  async listRooms(): Promise<Room[]> {
+  listRooms(): Promise<Room[]> {
     this.logger.log('listRooms');
 
-    return Array.from(this.roomsById.values())
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((room) => this.cloneRoom(room));
+    return Promise.resolve(
+      Array.from(this.roomsById.values())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((room) => this.cloneRoom(room)),
+    );
   }
 
-  async getRoomById(roomId: string): Promise<Room | null> {
+  getRoomById(roomId: string): Promise<Room | null> {
     this.logger.log(`getRoomById roomId=${roomId}`);
     const room = this.roomsById.get(roomId);
     this.logger.log(
       `getRoomById result roomId=${roomId} found=${Boolean(room)}`,
     );
-    return room ? this.cloneRoom(room) : null;
+    return Promise.resolve(room ? this.cloneRoom(room) : null);
   }
 
-  async addMember(member: RoomMember): Promise<RoomMember> {
+  addMember(member: RoomMember): Promise<RoomMember> {
     this.logger.log(
       `addMember roomId=${member.roomId} userId=${member.userId}`,
     );
@@ -97,46 +101,50 @@ export class InMemoryRoomsRepository implements RoomsRepository {
 
     const existing = roomMembers.get(member.userId);
     if (existing) {
-      return this.cloneMember(existing);
+      return Promise.resolve(this.cloneMember(existing));
     }
 
     roomMembers.set(member.userId, this.cloneMember(member));
-    return this.cloneMember(member);
+    return Promise.resolve(this.cloneMember(member));
   }
 
-  async getMember(roomId: string, userId: string): Promise<RoomMember | null> {
+  getMember(roomId: string, userId: string): Promise<RoomMember | null> {
     this.logger.log(`getMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
     const member = roomMembers?.get(userId);
-    return member ? this.cloneMember(member) : null;
+    return Promise.resolve(member ? this.cloneMember(member) : null);
   }
 
-  async removeMember(roomId: string, userId: string): Promise<void> {
+  removeMember(roomId: string, userId: string): Promise<void> {
     this.logger.log(`removeMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
     if (roomMembers) {
       roomMembers.delete(userId);
     }
+
+    return Promise.resolve();
   }
 
-  async getMembersByRoomId(roomId: string): Promise<RoomMember[]> {
+  getMembersByRoomId(roomId: string): Promise<RoomMember[]> {
     this.logger.log(`getMembersByRoomId roomId=${roomId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
 
     if (!roomMembers) {
-      return [];
+      return Promise.resolve([]);
     }
 
-    return Array.from(roomMembers.values())
-      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
-      .map((member) => this.cloneMember(member));
+    return Promise.resolve(
+      Array.from(roomMembers.values())
+        .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
+        .map((member) => this.cloneMember(member)),
+    );
   }
 
-  async countMembers(roomId: string): Promise<number> {
-    return this.membersByRoomId.get(roomId)?.size ?? 0;
+  countMembers(roomId: string): Promise<number> {
+    return Promise.resolve(this.membersByRoomId.get(roomId)?.size ?? 0);
   }
 
-  async createInvite(invite: RoomInvite): Promise<RoomInvite> {
+  createInvite(invite: RoomInvite): Promise<RoomInvite> {
     let roomInvites = this.invitesByRoomId.get(invite.roomId);
 
     if (!roomInvites) {
@@ -148,12 +156,12 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     roomInvites.set(invite.inviteCode, inviteCopy);
     this.invitesByCode.set(invite.inviteCode, inviteCopy);
 
-    return this.cloneInvite(inviteCopy);
+    return Promise.resolve(this.cloneInvite(inviteCopy));
   }
 
-  async getInviteByCode(inviteCode: string): Promise<RoomInvite | null> {
+  getInviteByCode(inviteCode: string): Promise<RoomInvite | null> {
     const invite = this.invitesByCode.get(inviteCode);
-    return invite ? this.cloneInvite(invite) : null;
+    return Promise.resolve(invite ? this.cloneInvite(invite) : null);
   }
 
   private cloneRoom(room: Room): Room {

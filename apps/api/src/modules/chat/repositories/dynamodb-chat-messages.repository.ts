@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { getErrorName } from '../../../common/aws/aws-errors';
 import { requireDynamoDbTableNames } from '../../../common/dynamodb/dynamodb-table-names';
 import type { ChatMessage } from '../entities/chat-message.entity';
 
@@ -124,16 +125,7 @@ export class DynamoDbChatMessagesRepository {
     return error instanceof Error
       ? error
       : new ServiceUnavailableException(
-        `DynamoDB request failed during ${operation}.`,
-      );
+          `DynamoDB request failed during ${operation}.`,
+        );
   }
-}
-
-function getErrorName(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object' || !('name' in error)) {
-    return undefined;
-  }
-
-  const value = (error as { name: unknown }).name;
-  return typeof value === 'string' ? value : undefined;
 }

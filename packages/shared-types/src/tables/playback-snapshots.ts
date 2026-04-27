@@ -4,11 +4,11 @@ export type PlaybackEventKind = 'play' | 'pause' | 'seek' | 'position';
 export interface PlaybackSnapshot {
   roomId: string;
   sequence: number;
-  eventType?: PlaybackEventKind;
+  eventType: PlaybackEventKind;
   state: PlaybackState;
   positionMs: number;
   updatedByUserId: string;
   updatedAt: string;
   eventId: string;
-  sentAt?: string;
+  sentAt: string;
 }

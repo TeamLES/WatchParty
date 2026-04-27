@@ -8,7 +8,9 @@ export class KickRoomMemberDto {
     example: 'cognito-user-sub',
   })
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
   userId!: string;
 }

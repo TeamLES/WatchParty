@@ -54,7 +54,7 @@ import { RoomsService } from './rooms.service';
   }),
 )
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) { }
+  constructor(private readonly roomsService: RoomsService) {}
 
   @Get()
   @ApiOperation({ summary: 'Get all rooms' })
@@ -145,7 +145,8 @@ export class RoomsController {
     @Body() joinRoomDto: JoinRoomDto,
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<JoinRoomResponse> {
-    const userId = user?.sub || `guest-${Math.random().toString(36).substring(7)}`;
+    const userId =
+      user?.sub || `guest-${Math.random().toString(36).substring(7)}`;
     return this.roomsService.joinRoom(
       params.roomId,
       userId,
@@ -247,11 +248,7 @@ export class RoomsController {
       return undefined;
     }
 
-    const candidates = [
-      user.username,
-      user.preferred_username,
-      user.email,
-    ];
+    const candidates = [user.username, user.preferred_username, user.email];
 
     for (const candidate of candidates) {
       if (typeof candidate !== 'string') {

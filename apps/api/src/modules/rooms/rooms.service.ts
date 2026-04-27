@@ -181,7 +181,9 @@ export class RoomsService {
 
     const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
-        const memberCount = await this.roomsRepository.countMembers(room.roomId);
+        const memberCount = await this.roomsRepository.countMembers(
+          room.roomId,
+        );
         return this.toRoomSummaryResponse(room, memberCount);
       }),
     );
@@ -264,12 +266,16 @@ export class RoomsService {
     const room = await this.getRoomOrThrow(roomId);
 
     if (room.hostUserId === userId) {
-      throw new ForbiddenException('Host cannot leave the room, must delete it instead');
+      throw new ForbiddenException(
+        'Host cannot leave the room, must delete it instead',
+      );
     }
 
     const member = await this.roomsRepository.getMember(roomId, userId);
     if (!member) {
-      this.logger.warn(`leaveRoom not a member roomId=${roomId} userId=${userId}`);
+      this.logger.warn(
+        `leaveRoom not a member roomId=${roomId} userId=${userId}`,
+      );
       return;
     }
 

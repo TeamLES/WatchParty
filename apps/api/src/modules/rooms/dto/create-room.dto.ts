@@ -16,7 +16,9 @@ export class CreateRoomDto {
     maxLength: 120,
   })
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
   @MaxLength(120)
   title!: string;
@@ -27,7 +29,7 @@ export class CreateRoomDto {
   })
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }) => {
     if (typeof value !== 'string') {
       return value;
     }
@@ -46,7 +48,7 @@ export class CreateRoomDto {
     description: 'Set true to create a private room.',
   })
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }) => {
     if (value === 'true') {
       return true;
     }
@@ -70,7 +72,9 @@ export class CreateRoomDto {
       dto.isPrivate === true || dto.password !== undefined,
   )
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
   @MaxLength(120)
   password?: string;

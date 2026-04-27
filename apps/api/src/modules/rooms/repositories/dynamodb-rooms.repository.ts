@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { getErrorName } from '../../../common/aws/aws-errors';
 import {
   requireDynamoDbTableNames,
   type DynamoDbTableNameKey,
@@ -62,10 +63,10 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     const staticCredentials =
       accessKeyId && secretAccessKey
         ? {
-          accessKeyId,
-          secretAccessKey,
-          ...(sessionToken ? { sessionToken } : {}),
-        }
+            accessKeyId,
+            secretAccessKey,
+            ...(sessionToken ? { sessionToken } : {}),
+          }
         : undefined;
     this.hasStaticCredentials = Boolean(staticCredentials);
 
@@ -545,8 +546,8 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     return error instanceof Error
       ? error
       : new ServiceUnavailableException(
-        `DynamoDB request failed during ${operation}.`,
-      );
+          `DynamoDB request failed during ${operation}.`,
+        );
   }
 
   private async logCallerIdentity(clientConfig: {
@@ -594,13 +595,4 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   }
 
   return value as Record<string, unknown>;
-}
-
-function getErrorName(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object' || !('name' in error)) {
-    return undefined;
-  }
-
-  const value = (error as { name: unknown }).name;
-  return typeof value === 'string' ? value : undefined;
 }
