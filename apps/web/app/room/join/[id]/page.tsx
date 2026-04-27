@@ -29,16 +29,14 @@ export default function JoinRoomPage({
         if (!res.ok) {
           throw new Error("Pravdepodobne neexistuje");
         }
-        const data = await res.json();
+        const data = (await res.json()) as GetRoomResponse;
 
-          // Only bypass join page if the user is already a room member and room is NOT private.
-          // User requested that private rooms ALWAYS ask for a password.
-          if (data.isMember && !data.isPrivate) {
-            router.replace(`/room/${roomId}`);
-            return;
-          }
+        if (data.isMember) {
+          router.replace(`/room/${roomId}`);
+          return;
+        }
 
-        setRoom(data as GetRoomResponse);
+        setRoom(data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -77,10 +75,6 @@ export default function JoinRoomPage({
         const errText = await res.text();
         console.error("Join fallback response", res.status, errText);
         throw new Error(`Nepodarilo sa pripojiť: ${res.status}`);
-      }
-
-      if (room?.isPrivate) {
-        sessionStorage.setItem(`unlocked_room_${roomId}`, "true");
       }
 
       router.replace(`/room/${roomId}`);

@@ -106,9 +106,7 @@ export default function HubPage() {
 
       const data = await res.json();
 
-      // By user requirement, ALWAYS ask for password, even for the host.
-      // Bypassing directly to the room is removed.
-      router.push(`/room/join/${data.roomId}`);
+      router.push(`/room/${data.roomId}`);
     } catch (error) {
       console.error("Failed to create room", error);
     } finally {

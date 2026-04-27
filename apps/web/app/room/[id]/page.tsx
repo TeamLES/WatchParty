@@ -131,19 +131,8 @@ export default function RoomPage({
         console.log("Video URL tejto roomky:", roomData.videoUrl);
 
         if (!roomData.isMember) {
-          if (roomData.isPrivate) {
-            sessionStorage.removeItem(`unlocked_room_${roomId}`);
-          }
           router.replace(`/room/join/${roomId}`);
           return;
-        }
-
-        if (roomData.isPrivate) {
-          const isUnlocked = sessionStorage.getItem(`unlocked_room_${roomId}`);
-          if (!isUnlocked) {
-            router.replace(`/room/join/${roomId}`);
-            return;
-          }
         }
 
         setRoom(roomData);
@@ -176,9 +165,6 @@ export default function RoomPage({
         const latestRoom = await fetchRoomSnapshot();
 
         if (!latestRoom.isMember) {
-          if (latestRoom.isPrivate) {
-            sessionStorage.removeItem(`unlocked_room_${roomId}`);
-          }
           router.replace(`/room/join/${roomId}`);
           return;
         }

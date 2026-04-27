@@ -216,15 +216,6 @@ export class RoomsService {
     this.logger.log(`joinRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
 
-    if (room.isPrivate) {
-      const providedPassword = joinRoomDto?.password?.trim() ?? '';
-      const storedPassword = room.password ?? '';
-
-      if (!providedPassword || providedPassword !== storedPassword) {
-        throw new ForbiddenException('Invalid password for private room');
-      }
-    }
-
     const existingMember = await this.roomsRepository.getMember(roomId, userId);
 
     if (existingMember) {
@@ -238,6 +229,15 @@ export class RoomsService {
         joinedAt: existingMember.joinedAt,
         alreadyMember: true,
       };
+    }
+
+    if (room.isPrivate) {
+      const providedPassword = joinRoomDto?.password?.trim() ?? '';
+      const storedPassword = room.password ?? '';
+
+      if (!providedPassword || providedPassword !== storedPassword) {
+        throw new ForbiddenException('Invalid password for private room');
+      }
     }
 
     const member: RoomMember = {
