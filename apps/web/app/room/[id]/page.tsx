@@ -555,7 +555,7 @@ export default function RoomPage({
           </div>
 
           {/* Video Player */}
-          <div className="glass-card panel-surface relative min-h-75 flex-1 overflow-hidden rounded-3xl shadow-2xl">
+          <div className="glass-card panel-surface relative min-h-136 flex-1 overflow-hidden rounded-3xl shadow-2xl xl:min-h-168">
             {/* Flying Emojis */}
             <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
               {flyingEmojis.map(({ id, emoji, left, rotation }) => (

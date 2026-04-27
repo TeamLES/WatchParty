@@ -11,11 +11,15 @@ import {
 } from "react";
 import {
   MonitorPlayIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   PauseIcon,
   PlayIcon,
   RefreshCwIcon,
   RotateCcwIcon,
-  RotateCwIcon,
+  Volume1Icon,
+  Volume2Icon,
+  VolumeXIcon,
   WifiIcon,
   WifiOffIcon,
 } from "lucide-react";
@@ -47,8 +51,13 @@ interface YouTubePlayer {
   destroy(): void;
   getCurrentTime(): number;
   getDuration(): number;
+  getVolume(): number;
+  isMuted(): boolean;
   pauseVideo(): void;
   playVideo(): void;
+  mute(): void;
+  unMute(): void;
+  setVolume(volume: number): void;
   seekTo(seconds: number, allowSeekAhead?: boolean): void;
 }
 
@@ -170,6 +179,7 @@ export function SyncedYouTubePlayer({
   videoId,
   isHost,
 }: SyncedYouTubePlayerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const playerMountRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -179,6 +189,8 @@ export function SyncedYouTubePlayer({
   const positionMsRef = useRef(0);
   const durationMsRef = useRef(0);
   const playbackStateRef = useRef<PlaybackState>("paused");
+  const volumeRef = useRef(100);
+  const mutedRef = useRef(false);
   const playerReadyRef = useRef(false);
   const isHostRef = useRef(isHost);
   const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
@@ -189,6 +201,10 @@ export function SyncedYouTubePlayer({
   const [playbackState, setPlaybackState] = useState<PlaybackState>("paused");
   const [positionMs, setPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  const [volume, setVolume] = useState(100);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showVolume, setShowVolume] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
   const syncLabel = useMemo(() => {
@@ -218,6 +234,26 @@ export function SyncedYouTubePlayer({
   useEffect(() => {
     durationMsRef.current = durationMs;
   }, [durationMs]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    mutedRef.current = isMuted;
+  }, [isMuted]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     playerReadyRef.current = playerReady;
@@ -258,6 +294,34 @@ export function SyncedYouTubePlayer({
       setDurationMs(nextDurationMs);
     } catch {
       // The player can briefly throw while the iframe is switching videos.
+    }
+  }, []);
+
+  const applySavedVolumeToPlayer = useCallback(() => {
+    const player = playerRef.current;
+
+    if (!player) {
+      return;
+    }
+
+    const nextVolume = Math.max(0, Math.min(100, volumeRef.current));
+
+    try {
+      player.setVolume(nextVolume);
+
+      if (mutedRef.current || nextVolume === 0) {
+        player.mute();
+        mutedRef.current = true;
+        setIsMuted(true);
+      } else {
+        player.unMute();
+        mutedRef.current = false;
+        setIsMuted(false);
+      }
+
+      setVolume(nextVolume);
+    } catch {
+      // Volume changes can fail briefly while the iframe is reinitializing.
     }
   }, []);
 
@@ -520,6 +584,7 @@ export function SyncedYouTubePlayer({
               }
 
               setPlayerReady(true);
+              applySavedVolumeToPlayer();
               refreshPlayerClock();
               sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
             },
@@ -562,7 +627,7 @@ export function SyncedYouTubePlayer({
       mount.innerHTML = "";
       setPlayerReady(false);
     };
-  }, [isHost, refreshPlayerClock, roomId, sendSocketMessage, videoId]);
+  }, [applySavedVolumeToPlayer, isHost, refreshPlayerClock, roomId, sendSocketMessage, videoId]);
 
   useEffect(() => {
     if (!playerReady) {
@@ -647,9 +712,93 @@ export function SyncedYouTubePlayer({
     }
   };
 
+  const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextVolume = Number(event.target.value);
+    setVolume(nextVolume);
+
+    const player = playerRef.current;
+    if (!player) {
+      return;
+    }
+
+    try {
+      player.setVolume(nextVolume);
+
+      if (nextVolume === 0) {
+        player.mute();
+        mutedRef.current = true;
+        setIsMuted(true);
+        return;
+      }
+
+      if (mutedRef.current) {
+        player.unMute();
+        mutedRef.current = false;
+        setIsMuted(false);
+      }
+    } catch {
+      // Ignore transient iframe errors while the player is switching.
+    }
+  };
+
+  const toggleMute = () => {
+    const player = playerRef.current;
+
+    if (!player || !playerReady) {
+      return;
+    }
+
+    if (mutedRef.current) {
+      const restoreVolume = volumeRef.current > 0 ? volumeRef.current : 60;
+
+      try {
+        player.unMute();
+        player.setVolume(restoreVolume);
+        mutedRef.current = false;
+        setIsMuted(false);
+        setVolume(restoreVolume);
+      } catch {
+        // Ignore transient iframe errors while the player is switching.
+      }
+
+      return;
+    }
+
+    try {
+      player.mute();
+      mutedRef.current = true;
+      setIsMuted(true);
+    } catch {
+      // Ignore transient iframe errors while the player is switching.
+    }
+  };
+
+  const toggleFullscreen = async () => {
+    const fullscreenTarget = containerRef.current;
+
+    if (!fullscreenTarget) {
+      return;
+    }
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (fullscreenTarget.requestFullscreen) {
+        await fullscreenTarget.requestFullscreen();
+      }
+    } catch {
+      // Some browsers require the fullscreen request to come from a direct click.
+    }
+  };
+
   const handleResync = () => {
     sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
   };
+
+  const VolumeIcon = isMuted || volume === 0 ? VolumeXIcon : volume < 50 ? Volume1Icon : Volume2Icon;
 
   if (!videoId) {
     return (
@@ -662,8 +811,11 @@ export function SyncedYouTubePlayer({
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col bg-black text-white">
+    <div ref={containerRef} className="absolute inset-0 flex flex-col overflow-hidden bg-black text-white">
       <div className="relative min-h-0 flex-1">
+        {!isHost && (
+          <div className="absolute inset-0 z-10" title="Only the host can control playback" />
+        )}
         <div ref={playerMountRef} className="absolute inset-0 h-full w-full" />
       </div>
 
@@ -682,7 +834,7 @@ export function SyncedYouTubePlayer({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="icon"
@@ -725,16 +877,60 @@ export function SyncedYouTubePlayer({
             className="h-2 min-w-0 flex-1 cursor-pointer accent-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-45"
           />
 
+          <div className="relative flex items-center">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-10 w-10 shrink-0 rounded-lg text-zinc-200 hover:bg-white/10 hover:text-white disabled:opacity-45"
+              onClick={() => setShowVolume((prev) => !prev)}
+              disabled={!playerReady}
+              title="Volume Controls"
+            >
+              <VolumeIcon className="size-4" />
+            </Button>
+
+            {showVolume && (
+              <div className="absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 flex-col items-center gap-3 rounded-xl border border-white/10 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl">
+                <div className="flex h-24 w-8 items-center justify-center">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    aria-label="Volume slider"
+                    className="h-2 w-24 -rotate-90 cursor-pointer accent-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-45"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 rounded-md text-zinc-200 hover:bg-white/10 hover:text-white"
+                  onClick={toggleMute}
+                  title={isMuted || volume === 0 ? "Unmute" : "Mute"}
+                >
+                  <VolumeIcon className="size-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="h-10 w-10 shrink-0 rounded-lg text-zinc-200 hover:bg-white/10 hover:text-white disabled:opacity-45"
-            onClick={() => seekTo(positionMsRef.current + 10000)}
-            disabled={!isHost || !playerReady}
-            title="Forward 10 seconds"
+            className="h-10 w-10 shrink-0 rounded-lg text-zinc-200 hover:bg-white/10 hover:text-white"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            <RotateCwIcon className="size-4" />
+            {isFullscreen ? (
+              <Minimize2Icon className="size-4" />
+            ) : (
+              <Maximize2Icon className="size-4" />
+            )}
           </Button>
 
           <Button
