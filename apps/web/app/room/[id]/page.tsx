@@ -91,9 +91,11 @@ export default function RoomPage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(false);
 
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
   const router = useRouter();
 
@@ -324,8 +326,13 @@ export default function RoomPage({
   );
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [messages, isFullscreen]);
 
   const handleCopyInvite = async () => {
     const joinUrl = `${window.location.origin}/room/join/${roomId}`;
@@ -459,10 +466,10 @@ export default function RoomPage({
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
-      {/* Main Workspace */}
-      <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 overflow-hidden max-h-[calc(100vh-4rem-1rem)]">
-        {/* Video Column (Main Content) */}
-        <section className="flex-1 flex flex-col gap-4 min-w-0">
+        {/* Main Workspace */}
+        <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 lg:overflow-hidden lg:max-h-[calc(100vh-4rem-1rem)]">
+          {/* Video Column (Main Content) */}
+          <section className="flex-1 flex flex-col gap-4 min-w-0">
           {/* Integrated Room Info Bar */}
           <div className="glass-card panel-surface flex shrink-0 flex-col gap-4 rounded-2xl p-4 shadow-sm">
             {/* Top row: Title and Actions */}
@@ -571,7 +578,7 @@ export default function RoomPage({
           </div>
 
           {/* Video Player */}
-          <div className="glass-card panel-surface relative min-h-136 flex-1 overflow-hidden rounded-3xl shadow-2xl xl:min-h-168">
+          <div className="glass-card panel-surface relative min-h-[50vh] flex-1 overflow-hidden rounded-3xl shadow-2xl lg:min-h-0 xl:min-h-168">
             {/* Flying Emojis */}
             <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
               {flyingEmojis.map(({ id, emoji, left, rotation }) => (
@@ -597,54 +604,137 @@ export default function RoomPage({
               isHost={canControlVideo}
               onOnlineCountChange={setLiveOnlineCount}
               onChatEvent={handleChatEvent}
-            />
+              onFullscreenChange={setIsFullscreen}
+            >
+              {isFullscreen && (
+                <div className="absolute right-0 top-0 bottom-0 w-80 z-50 flex flex-col border-l border-white/10 bg-black/80 backdrop-blur-md shadow-2xl">
+                  {/* Chat Header */}
+                  <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/5 p-4 text-white">
+                    <div className="flex items-center gap-2">
+                      <MessageSquareTextIcon className="size-5 text-fuchsia-400" />
+                      <h2 className="font-semibold text-lg">Room Chat</h2>
+                    </div>
+                  </div>
+
+                  {/* Messages Scroll Area */}
+                  <div
+                    ref={chatContainerRef}
+                    className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20"
+                  >
+                    {messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                      >
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="text-xs font-medium text-white/70">
+                            {msg.user}
+                          </span>
+                          <span className="text-[10px] text-white/40">
+                            {msg.time}
+                          </span>
+                        </div>
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-fuchsia-500 text-white" : "rounded-bl-sm border border-white/10 bg-white/10 text-white"}`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Quick Reactions Center */}
+                  <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-white/10 bg-white/5 px-4 py-2">
+                    {["🔥", "😂", "❤️", "👀"].map((emoji) => (
+                      <Button
+                        key={emoji}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReaction(emoji)}
+                        className="h-10 w-10 text-white hover:bg-white/10 rounded-full p-0 text-xl transition-transform hover:scale-110"
+                      >
+                        {emoji}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Chat Input */}
+                  <div className="shrink-0 bg-transparent p-4 pt-2">
+                    <form
+                      onSubmit={handleSendMessage}
+                      className="relative flex items-center"
+                    >
+                      <Input
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        className="h-12 rounded-xl border border-white/20 bg-black/40 pr-12 text-sm text-white focus-visible:ring-fuchsia-500/50"
+                      />
+                      <Button
+                        type="submit"
+                        size="icon"
+                        variant="ghost"
+                        className="absolute right-1 h-10 w-10 rounded-lg text-fuchsia-400 hover:bg-white/10 hover:text-fuchsia-300 transition-colors"
+                        disabled={!newMessage.trim()}
+                      >
+                        <SendIcon className="size-4" />
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </SyncedYouTubePlayer>
           </div>
         </section>
 
         {/* Live Chat Column */}
         <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 h-125 lg:h-auto pb-2">
-          <div className="glass-card panel-surface flex h-full flex-col overflow-hidden rounded-3xl shadow-lg">
-            {/* Chat Header */}
-            <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
-              <div className="flex items-center gap-2">
-                <MessageSquareTextIcon className="size-5 text-primary" />
-                <h2 className="font-semibold text-lg">Room Chat</h2>
-              </div>
-              <div className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Live
-              </div>
-            </div>
-
-            {/* Messages Scroll Area */}
-            <div className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
-                >
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {msg.user}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/60">
-                      {msg.time}
-                    </span>
-                  </div>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
-                  >
-                    {msg.text}
-                  </div>
+          {!isFullscreen && (
+            <div className="glass-card panel-surface flex h-full flex-col overflow-hidden rounded-3xl shadow-lg">
+              {/* Chat Header */}
+              <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
+                <div className="flex items-center gap-2">
+                  <MessageSquareTextIcon className="size-5 text-primary" />
+                  <h2 className="font-semibold text-lg">Room Chat</h2>
                 </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
+                <div className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  Live
+                </div>
+              </div>
 
-            {/* Quick Reactions Center */}
+              {/* Messages Scroll Area */}
+              <div
+                ref={chatContainerRef}
+                className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
+              >
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                  >
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {msg.user}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {msg.time}
+                      </span>
+                    </div>
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Quick Reactions Center */}
             <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
               {["😀", "😢", "😡", "❤️"].map((emoji) => (
                 <Button
@@ -684,6 +774,7 @@ export default function RoomPage({
               </form>
             </div>
           </div>
+          )}
         </aside>
       </main>
 

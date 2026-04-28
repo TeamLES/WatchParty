@@ -51,6 +51,8 @@ export interface SyncedYouTubePlayerProps {
   isHost: boolean;
   onOnlineCountChange?: (onlineCount: number | null) => void;
   onChatEvent?: (event: ChatMessageEvent | ReactionEvent) => void;
+  onFullscreenChange?: (isFullscreen: boolean) => void;
+  children?: React.ReactNode;
 }
 
 interface YouTubePlayerEvent {
@@ -188,7 +190,7 @@ export const SyncedYouTubePlayer = forwardRef<
   SyncedYouTubePlayerRef,
   SyncedYouTubePlayerProps
 >(function SyncedYouTubePlayer(
-  { roomId, videoId, isHost, onOnlineCountChange, onChatEvent },
+  { roomId, videoId, isHost, onOnlineCountChange, onChatEvent, onFullscreenChange, children },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -257,7 +259,9 @@ export const SyncedYouTubePlayer = forwardRef<
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const isFs = Boolean(document.fullscreenElement);
+      setIsFullscreen(isFs);
+      onFullscreenChange?.(isFs);
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -265,7 +269,7 @@ export const SyncedYouTubePlayer = forwardRef<
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, []);
+  }, [onFullscreenChange]);
 
   useEffect(() => {
     playerReadyRef.current = playerReady;
@@ -980,6 +984,12 @@ export const SyncedYouTubePlayer = forwardRef<
           >
             <RefreshCwIcon className="size-4" />
           </Button>
+        </div>
+      </div>
+      {/* Overlay Content */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-16 top-0 z-30">
+        <div className="pointer-events-auto h-full w-full">
+          {children}
         </div>
       </div>
     </div>
