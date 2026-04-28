@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAccessTokenFromCookies } from "@/lib/cookies";
 
@@ -101,7 +102,7 @@ export default async function Home() {
       <section className="mx-auto flex w-full max-w-5xl flex-col items-center text-center">
         <Badge
           variant="outline"
-          className="glass-card border-primary/35 bg-background/75 px-4 py-1.5 text-sm font-medium text-primary dark:bg-black/30"
+          className="glass-card border-primary/35 bg-background/75 px-4 py-4 text-sm font-medium text-primary dark:bg-black/30"
         >
           <SparklesIcon className="size-4" />
           WatchParty is now in beta
@@ -121,12 +122,13 @@ export default async function Home() {
         </p>
 
         <div className="mt-10">
-          <Link
-            href="/auth/login"
-            className="text-base font-semibold text-primary underline decoration-primary/70 underline-offset-6 transition-colors hover:text-primary/80"
+          <Button
+            asChild
+            size="lg"
+            className="text-base px-8 py-6 text-lg shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all hover:scale-105 hover:bg-primary/90"
           >
-            Continue to Sign In
-          </Link>
+            <Link href="/auth/login">Continue to Sign In</Link>
+          </Button>
         </div>
 
         <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm font-medium text-muted-foreground">

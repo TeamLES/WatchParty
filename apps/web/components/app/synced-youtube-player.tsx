@@ -190,7 +190,15 @@ export const SyncedYouTubePlayer = forwardRef<
   SyncedYouTubePlayerRef,
   SyncedYouTubePlayerProps
 >(function SyncedYouTubePlayer(
-  { roomId, videoId, isHost, onOnlineCountChange, onChatEvent, onFullscreenChange, children },
+  {
+    roomId,
+    videoId,
+    isHost,
+    onOnlineCountChange,
+    onChatEvent,
+    onFullscreenChange,
+    children,
+  },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -635,7 +643,10 @@ export const SyncedYouTubePlayer = forwardRef<
               }
 
               if (event.data === youtube.PlayerState.PLAYING) {
-                if (playbackStateRef.current !== "playing" && isHostRef.current) {
+                if (
+                  playbackStateRef.current !== "playing" &&
+                  isHostRef.current
+                ) {
                   sendPlaybackEventRef.current?.("play", "playing");
                 }
                 setPlaybackState("playing");
@@ -645,7 +656,10 @@ export const SyncedYouTubePlayer = forwardRef<
                 event.data === youtube.PlayerState.PAUSED ||
                 event.data === youtube.PlayerState.ENDED
               ) {
-                if (playbackStateRef.current !== "paused" && isHostRef.current) {
+                if (
+                  playbackStateRef.current !== "paused" &&
+                  isHostRef.current
+                ) {
                   sendPlaybackEventRef.current?.("pause", "paused");
                 }
                 setPlaybackState("paused");
@@ -668,7 +682,14 @@ export const SyncedYouTubePlayer = forwardRef<
       mount.innerHTML = "";
       setPlayerReady(false);
     };
-  }, [applySavedVolumeToPlayer, isHost, refreshPlayerClock, roomId, sendSocketMessage, videoId]);
+  }, [
+    applySavedVolumeToPlayer,
+    isHost,
+    refreshPlayerClock,
+    roomId,
+    sendSocketMessage,
+    videoId,
+  ]);
 
   useEffect(() => {
     if (!playerReady) {
@@ -839,7 +860,12 @@ export const SyncedYouTubePlayer = forwardRef<
     sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
   };
 
-  const VolumeIcon = isMuted || volume === 0 ? VolumeXIcon : volume < 50 ? Volume1Icon : Volume2Icon;
+  const VolumeIcon =
+    isMuted || volume === 0
+      ? VolumeXIcon
+      : volume < 50
+        ? Volume1Icon
+        : Volume2Icon;
 
   if (!videoId) {
     return (
@@ -852,10 +878,16 @@ export const SyncedYouTubePlayer = forwardRef<
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0 flex flex-col overflow-hidden bg-black text-white">
+    <div
+      ref={containerRef}
+      className="absolute inset-0 flex flex-col overflow-hidden bg-black text-white"
+    >
       <div className="relative min-h-0 flex-1">
         {!isHost && (
-          <div className="absolute inset-0 z-10" title="Only the host can control playback" />
+          <div
+            className="absolute inset-0 z-10"
+            title="Only the host can control playback"
+          />
         )}
         <div ref={playerMountRef} className="absolute inset-0 h-full w-full" />
       </div>
@@ -988,9 +1020,7 @@ export const SyncedYouTubePlayer = forwardRef<
       </div>
       {/* Overlay Content */}
       <div className="pointer-events-none absolute inset-x-0 bottom-16 top-0 z-30">
-        <div className="pointer-events-auto h-full w-full">
-          {children}
-        </div>
+        <div className="pointer-events-none h-full w-full">{children}</div>
       </div>
     </div>
   );

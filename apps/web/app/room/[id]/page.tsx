@@ -11,6 +11,7 @@ import {
   SettingsIcon,
   Share2Icon,
   TrashIcon,
+  PanelRightCloseIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type {
@@ -61,6 +62,8 @@ const generateReactionContext = () => ({
   rotation: Math.floor(Math.random() * 60) - 30,
 });
 
+const EMOJI_LIST = ["😂", "❤️", "🔥", "👀"];
+
 export default function RoomPage({
   params,
 }: {
@@ -92,7 +95,7 @@ export default function RoomPage({
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(false);
+  const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
 
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -305,12 +308,17 @@ export default function RoomPage({
               hour: "2-digit",
               minute: "2-digit",
             }),
-            isMe: existingMember ? existingMember.userId === currentUserId : false,
+            isMe: existingMember
+              ? existingMember.userId === currentUserId
+              : false,
           },
         ]);
       } else if (event.type === "chat.reaction") {
         const id = Date.now();
-        const left = 50 + Math.random() * 40; // 50% - 90% right side base
+        // distribute them randomly across mostly full screen width
+        // but if the chat is open, maybe they shouldn't go entirely under it
+        const maxRight = isFullscreen && isFullscreenChatOpen ? 70 : 95;
+        const left = 5 + Math.random() * maxRight;
         const rotation = -20 + Math.random() * 40; // -20deg to +20deg
         setFlyingEmojis((prev) => [
           ...prev,
@@ -322,7 +330,7 @@ export default function RoomPage({
         }, 2500);
       }
     },
-    [currentUserId, room?.members],
+    [currentUserId, room?.members, isFullscreen, isFullscreenChatOpen],
   );
 
   useEffect(() => {
@@ -466,10 +474,10 @@ export default function RoomPage({
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
-        {/* Main Workspace */}
-        <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 lg:overflow-hidden lg:max-h-[calc(100vh-4rem-1rem)]">
-          {/* Video Column (Main Content) */}
-          <section className="flex-1 flex flex-col gap-4 min-w-0">
+      {/* Main Workspace */}
+      <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 lg:overflow-hidden lg:max-h-[calc(100vh-4rem-1rem)]">
+        {/* Video Column (Main Content) */}
+        <section className="flex-1 flex flex-col gap-4 min-w-0">
           {/* Integrated Room Info Bar */}
           <div className="glass-card panel-surface flex shrink-0 flex-col gap-4 rounded-2xl p-4 shadow-sm">
             {/* Top row: Title and Actions */}
@@ -579,24 +587,6 @@ export default function RoomPage({
 
           {/* Video Player */}
           <div className="glass-card panel-surface relative min-h-[50vh] flex-1 overflow-hidden rounded-3xl shadow-2xl lg:min-h-0 xl:min-h-168">
-            {/* Flying Emojis */}
-            <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-              {flyingEmojis.map(({ id, emoji, left, rotation }) => (
-                <div
-                  key={id}
-                  className="absolute bottom-0 text-5xl animate-[flyUp_2.5s_ease-out_forwards]"
-                  style={{
-                    left: `${left}%`,
-                    transform: `rotate(${rotation}deg)`,
-                  }}
-                >
-                  <div style={{ transform: `rotate(${rotation}deg)` }}>
-                    {emoji}
-                  </div>
-                </div>
-              ))}
-            </div>
-
             <SyncedYouTubePlayer
               ref={socketPlayerRef}
               roomId={roomId}
@@ -606,14 +596,53 @@ export default function RoomPage({
               onChatEvent={handleChatEvent}
               onFullscreenChange={setIsFullscreen}
             >
-              {isFullscreen && (
-                <div className="absolute right-0 top-0 bottom-0 w-80 z-50 flex flex-col border-l border-white/10 bg-black/80 backdrop-blur-md shadow-2xl">
+              {/* Flying Emojis */}
+              <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+                {flyingEmojis.map(({ id, emoji, left, rotation }) => (
+                  <div
+                    key={id}
+                    className="absolute bottom-0 text-5xl animate-[flyUp_2.5s_ease-out_forwards]"
+                    style={{
+                      left: `${left}%`,
+                      transform: `rotate(${rotation}deg)`,
+                    }}
+                  >
+                    <div style={{ transform: `rotate(${rotation}deg)` }}>
+                      {emoji}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {isFullscreen && !isFullscreenChatOpen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="pointer-events-auto absolute right-4 top-4 z-50 h-10 w-10 rounded-xl bg-black/60 text-white hover:bg-black/80 hover:text-fuchsia-400 backdrop-blur-md transition-all shadow-lg"
+                  onClick={() => setIsFullscreenChatOpen(true)}
+                  title="Open Chat"
+                >
+                  <MessageSquareTextIcon className="size-5" />
+                </Button>
+              )}
+
+              {isFullscreen && isFullscreenChatOpen && (
+                <div className="pointer-events-auto absolute right-0 top-0 bottom-0 w-80 z-50 flex flex-col border-l border-white/10 bg-black/80 backdrop-blur-md shadow-2xl transition-transform duration-300">
                   {/* Chat Header */}
                   <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/5 p-4 text-white">
                     <div className="flex items-center gap-2">
                       <MessageSquareTextIcon className="size-5 text-fuchsia-400" />
                       <h2 className="font-semibold text-lg">Room Chat</h2>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+                      onClick={() => setIsFullscreenChatOpen(false)}
+                      title="Collapse Chat"
+                    >
+                      <PanelRightCloseIcon className="size-4" />
+                    </Button>
                   </div>
 
                   {/* Messages Scroll Area */}
@@ -645,7 +674,7 @@ export default function RoomPage({
 
                   {/* Quick Reactions Center */}
                   <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-white/10 bg-white/5 px-4 py-2">
-                    {["🔥", "😂", "❤️", "👀"].map((emoji) => (
+                    {EMOJI_LIST.map((emoji) => (
                       <Button
                         key={emoji}
                         type="button"
@@ -735,45 +764,45 @@ export default function RoomPage({
               </div>
 
               {/* Quick Reactions Center */}
-            <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
-              {["😀", "😢", "😡", "❤️"].map((emoji) => (
-                <Button
-                  key={emoji}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleReaction(emoji)}
-                  className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
-                >
-                  {emoji}
-                </Button>
-              ))}
-            </div>
+              <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
+                {EMOJI_LIST.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleReaction(emoji)}
+                    className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
+                  >
+                    {emoji}
+                  </Button>
+                ))}
+              </div>
 
-            {/* Chat Input */}
-            <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
-              <form
-                onSubmit={handleSendMessage}
-                className="relative flex items-center"
-              >
-                <Input
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  variant="ghost"
-                  className="absolute right-1 h-10 w-10 rounded-lg text-primary hover:bg-primary/20 hover:text-primary transition-colors"
-                  disabled={!newMessage.trim()}
+              {/* Chat Input */}
+              <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
+                <form
+                  onSubmit={handleSendMessage}
+                  className="relative flex items-center"
                 >
-                  <SendIcon className="size-4" />
-                </Button>
-              </form>
+                  <Input
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-1 h-10 w-10 rounded-lg text-primary hover:bg-primary/20 hover:text-primary transition-colors"
+                    disabled={!newMessage.trim()}
+                  >
+                    <SendIcon className="size-4" />
+                  </Button>
+                </form>
+              </div>
             </div>
-          </div>
           )}
         </aside>
       </main>

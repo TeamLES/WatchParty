@@ -2,6 +2,7 @@ import { ArrowLeftIcon, FilmIcon, LockKeyholeIcon } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -95,12 +96,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             ) : null}
 
             <div className="text-center">
-              <a
-                href="/auth/login/start"
-                className="text-sm font-semibold text-primary underline decoration-primary/70 underline-offset-6 transition-colors hover:text-primary/80"
-              >
-                Continue to Sign In
-              </a>
+              <Button asChild size="lg" className="w-full">
+                <a href="/auth/login/start">Continue to Sign In</a>
+              </Button>
             </div>
 
             <p className="text-center text-xs text-muted-foreground">
