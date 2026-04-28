@@ -50,11 +50,27 @@ interface PingMessage {
   action: "ping";
 }
 
+interface ChatMessageReceived {
+  action: "chatMessage";
+  roomId: string;
+  text: string;
+  messageId?: string;
+  sentAt?: string;
+}
+
+interface ReactionMessage {
+  action: "reaction";
+  roomId: string;
+  emoji: string;
+}
+
 type InboundMessage =
   | JoinRoomMessage
   | LeaveRoomMessage
   | SyncPlaybackMessage
   | GetPlaybackSnapshotMessage
+  | ChatMessageReceived
+  | ReactionMessage
   | PingMessage
   | Record<string, unknown>;
 
@@ -633,53 +649,53 @@ async function onGetPlaybackSnapshot(
 async function onSyncPlayback(
   event: APIGatewayProxyWebsocketEventV2,
 ): Promise<APIGatewayProxyResultV2> {
-  const body = validateSyncPayload(
+  const msg = validateSyncPayload(
     parseBody(event) as Partial<SyncPlaybackMessage>,
   );
   const connectionId = event.requestContext.connectionId;
-  const updatedByUserId = senderUserId(event);
+  const userId = senderUserId(event);
 
-  if (!body || !updatedByUserId) {
+  if (!msg || !userId) {
     return response(400, { message: "Invalid syncPlayback payload" });
   }
 
   const [connection, room] = await Promise.all([
     getConnection(connectionId),
-    getRoom(body.roomId),
+    getRoom(msg.roomId),
   ]);
 
   if (!room) {
     return response(404, { message: "Room not found" });
   }
 
-  if (room.hostUserId !== updatedByUserId) {
+  if (room.hostUserId !== userId) {
     return response(403, { message: "Only the room host can sync playback" });
   }
 
-  if (connection?.roomId !== body.roomId) {
+  if (connection?.roomId !== msg.roomId) {
     return response(403, { message: "Connection has not joined this room" });
   }
 
-  const latestSnapshot = await getLatestSnapshot(body.roomId);
-  if (latestSnapshot && latestSnapshot.sequence >= body.sequence) {
+  const latestSnapshot = await getLatestSnapshot(msg.roomId);
+  if (latestSnapshot && latestSnapshot.sequence >= msg.sequence) {
     return response(409, { message: "Stale playback sequence" });
   }
 
-  if (await hasPlaybackEventId(body.roomId, body.eventId)) {
+  if (await hasPlaybackEventId(msg.roomId, msg.eventId)) {
     return response(409, { message: "Duplicate playback event" });
   }
 
   const updatedAt = nowIso();
   const snapshot: PlaybackSnapshotRecord = {
-    roomId: body.roomId,
-    sequence: body.sequence,
-    eventType: body.eventType,
-    state: body.state,
-    positionMs: body.positionMs,
-    updatedByUserId,
+    roomId: msg.roomId,
+    sequence: msg.sequence,
+    eventType: msg.eventType,
+    state: msg.state,
+    positionMs: msg.positionMs,
+    updatedByUserId: userId,
     updatedAt,
-    eventId: body.eventId,
-    sentAt: body.sentAt,
+    eventId: msg.eventId,
+    sentAt: msg.sentAt,
   };
 
   try {
@@ -717,12 +733,87 @@ async function onSyncPlayback(
 
   const delivered = await broadcastToRoom(
     event,
-    body.roomId,
+    msg.roomId,
     outboundPayload,
     connectionId,
   );
 
   return response(200, { ok: true, route: "syncPlayback", delivered });
+}
+
+async function onChatMessage(
+  event: APIGatewayProxyWebsocketEventV2,
+  userId: string | null,
+  msg: ChatMessageReceived,
+): Promise<APIGatewayProxyResultV2> {
+  if (!userId) {
+    return response(401, { message: "Unauthorized" });
+  }
+
+  const text = readString(msg.text);
+  if (!text || text.length > 500) {
+    return response(400, { message: "Invalid chat message" });
+  }
+
+  const currentConn = await getConnection(event.requestContext.connectionId);
+
+  if (!currentConn?.roomId) {
+    return response(403, { message: "Connection has not joined a room" });
+  }
+
+  if (msg.roomId && msg.roomId !== currentConn.roomId) {
+    return response(403, { message: "Connection has not joined this room" });
+  }
+
+  const payload = {
+    type: "chat.message",
+    roomId: currentConn.roomId,
+    text,
+    messageId: randomUUID(),
+    userId,
+    sentAt: nowIso(),
+  };
+
+  const delivered = await broadcastToRoom(event, currentConn.roomId, payload);
+
+  return response(200, { ok: true, route: "chatMessage", delivered });
+}
+
+async function onReactionMessage(
+  event: APIGatewayProxyWebsocketEventV2,
+  userId: string | null,
+  msg: ReactionMessage,
+): Promise<APIGatewayProxyResultV2> {
+  if (!userId) {
+    return response(401, { message: "Unauthorized" });
+  }
+
+  const emoji = readString(msg.emoji);
+  if (!emoji || emoji.length > 16) {
+    return response(400, { message: "Invalid reaction" });
+  }
+
+  const currentConn = await getConnection(event.requestContext.connectionId);
+
+  if (!currentConn?.roomId) {
+    return response(403, { message: "Connection has not joined a room" });
+  }
+
+  if (msg.roomId && msg.roomId !== currentConn.roomId) {
+    return response(403, { message: "Connection has not joined this room" });
+  }
+
+  const payload = {
+    type: "chat.reaction",
+    roomId: currentConn.roomId,
+    emoji,
+    userId,
+    sentAt: nowIso(),
+  };
+
+  const delivered = await broadcastToRoom(event, currentConn.roomId, payload);
+
+  return response(200, { ok: true, route: "reaction", delivered });
 }
 
 export async function handler(
@@ -746,6 +837,18 @@ export async function handler(
         return await onGetPlaybackSnapshot(event);
       case "ping":
         return await onPing(event);
+      case "chatMessage":
+        return await onChatMessage(
+          event,
+          senderUserId(event),
+          parseBody(event) as ChatMessageReceived,
+        );
+      case "reaction":
+        return await onReactionMessage(
+          event,
+          senderUserId(event),
+          parseBody(event) as ReactionMessage,
+        );
       case "$default":
       default:
         return response(200, {
@@ -760,9 +863,6 @@ export async function handler(
   }
 }
 
-function base64UrlEncode(value: string): string {
-  return Buffer.from(value).toString("base64url");
-}
 
 function base64UrlDecode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");

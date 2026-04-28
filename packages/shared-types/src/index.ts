@@ -28,4 +28,6 @@ export type {
   WatchPartyInboundWebSocketMessage,
   WatchPartyOutboundWebSocketEvent,
   WatchPartyWebSocketErrorEvent,
+  ChatMessageEvent,
+  ReactionEvent,
 } from "./websocket-events.js";

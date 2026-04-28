@@ -33,6 +33,20 @@ export interface PingMessage {
   action: "ping";
 }
 
+export interface ChatMessageReceived {
+  action: "chatMessage";
+  roomId: string;
+  text: string;
+  messageId?: string;
+  sentAt?: string;
+}
+
+export interface ReactionMessage {
+  action: "reaction";
+  roomId: string;
+  emoji: string;
+}
+
 export interface WebSocketTicketResponse {
   wsUrl: string;
   ticket: string;
@@ -44,6 +58,8 @@ export type WatchPartyInboundWebSocketMessage =
   | LeaveRoomMessage
   | SyncPlaybackMessage
   | GetPlaybackSnapshotMessage
+  | ChatMessageReceived
+  | ReactionMessage
   | PingMessage;
 
 export interface PlaybackSyncEvent {
@@ -82,8 +98,27 @@ export interface WatchPartyWebSocketErrorEvent {
   message: string;
 }
 
+export interface ChatMessageEvent {
+  type: "chat.message";
+  roomId: string;
+  messageId: string;
+  text: string;
+  userId: string;
+  sentAt: string;
+}
+
+export interface ReactionEvent {
+  type: "chat.reaction";
+  roomId: string;
+  emoji: string;
+  userId: string;
+  sentAt: string;
+}
+
 export type WatchPartyOutboundWebSocketEvent =
   | PlaybackSyncEvent
   | PlaybackSnapshotEvent
   | PresenceUpdatedEvent
+  | ChatMessageEvent
+  | ReactionEvent
   | WatchPartyWebSocketErrorEvent;

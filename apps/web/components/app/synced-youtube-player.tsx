@@ -6,6 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
+  forwardRef,
+  useImperativeHandle,
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
@@ -30,17 +32,25 @@ import type {
   PlaybackSyncEvent,
   WatchPartyOutboundWebSocketEvent,
   WebSocketTicketResponse,
+  ChatMessageEvent,
+  ReactionEvent,
 } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 
 type SocketStatus = "idle" | "connecting" | "connected" | "unavailable";
 
-interface SyncedYouTubePlayerProps {
+export interface SyncedYouTubePlayerRef {
+  sendChatMessage: (text: string) => void;
+  sendReaction: (emoji: string) => void;
+}
+
+export interface SyncedYouTubePlayerProps {
   roomId: string;
   videoId: string | null;
   isHost: boolean;
   onOnlineCountChange?: (onlineCount: number | null) => void;
+  onChatEvent?: (event: ChatMessageEvent | ReactionEvent) => void;
 }
 
 interface YouTubePlayerEvent {
@@ -174,12 +184,13 @@ function parseSocketEvent(
   }
 }
 
-export function SyncedYouTubePlayer({
-  roomId,
-  videoId,
-  isHost,
-  onOnlineCountChange,
-}: SyncedYouTubePlayerProps) {
+export const SyncedYouTubePlayer = forwardRef<
+  SyncedYouTubePlayerRef,
+  SyncedYouTubePlayerProps
+>(function SyncedYouTubePlayer(
+  { roomId, videoId, isHost, onOnlineCountChange, onChatEvent },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerMountRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -337,6 +348,23 @@ export function SyncedYouTubePlayer({
     return true;
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    sendChatMessage: (text: string) => {
+      sendSocketMessage({
+        action: "chatMessage",
+        roomId,
+        text,
+      });
+    },
+    sendReaction: (emoji: string) => {
+      sendSocketMessage({
+        action: "reaction",
+        roomId,
+        emoji,
+      });
+    },
+  }));
+
   const sendPlaybackEvent = useCallback(
     (
       eventType: PlaybackEventKind,
@@ -435,6 +463,11 @@ export function SyncedYouTubePlayer({
         return;
       }
 
+      if (message.type === "chat.message" || message.type === "chat.reaction") {
+        onChatEvent?.(message);
+        return;
+      }
+
       if (message.type === "presence.updated" && message.roomId === roomId) {
         setOnlineCount(message.onlineCount);
         onOnlineCountChange?.(message.onlineCount);
@@ -450,7 +483,7 @@ export function SyncedYouTubePlayer({
         applyRemotePlayback(message);
       }
     },
-    [applyRemotePlayback, onOnlineCountChange, roomId],
+    [applyRemotePlayback, onChatEvent, onOnlineCountChange, roomId],
   );
 
   useEffect(() => {
@@ -951,4 +984,4 @@ export function SyncedYouTubePlayer({
       </div>
     </div>
   );
-}
+});

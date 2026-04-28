@@ -17,12 +17,17 @@ import type {
   AuthMeResponse,
   GetRoomResponse,
   RoomMemberResponse,
+  ChatMessageEvent,
+  ReactionEvent,
 } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { SyncedYouTubePlayer } from "@/components/app/synced-youtube-player";
+import {
+  SyncedYouTubePlayer,
+  type SyncedYouTubePlayerRef,
+} from "@/components/app/synced-youtube-player";
 import { extractYoutubeId } from "@/lib/youtube";
 
 // Hardcoded mock messages
@@ -87,6 +92,7 @@ export default function RoomPage({
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
 
+  const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
   const router = useRouter();
@@ -266,21 +272,56 @@ export default function RoomPage({
     e?.preventDefault();
     if (!newMessage.trim()) return;
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        user: "You",
-        text: newMessage,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isMe: true,
-      },
-    ]);
+    socketPlayerRef.current?.sendChatMessage(newMessage);
     setNewMessage("");
   };
+
+  const handleChatEvent = useCallback(
+    (event: ChatMessageEvent | ReactionEvent) => {
+      const existingMember = room?.members.find(
+        (m) => m.userId === event.userId,
+      );
+      let displayName = "Anon";
+      if (existingMember) {
+        displayName = formatMemberDisplayName(existingMember);
+      } else if (event.userId.startsWith("guest-")) {
+        displayName = `Guest ${event.userId.slice(-4)}`;
+      } else {
+        displayName = `User ${event.userId.slice(0, 8)}`;
+      }
+
+      if (event.type === "chat.message") {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Number(
+              event.messageId.replace(/\D/g, "").slice(0, 10) || Date.now(),
+            ),
+            user: displayName,
+            text: event.text,
+            time: new Date(event.sentAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            isMe: existingMember ? existingMember.userId === currentUserId : false,
+          },
+        ]);
+      } else if (event.type === "chat.reaction") {
+        const id = Date.now();
+        const left = 50 + Math.random() * 40; // 50% - 90% right side base
+        const rotation = -20 + Math.random() * 40; // -20deg to +20deg
+        setFlyingEmojis((prev) => [
+          ...prev,
+          { id, emoji: event.emoji, left, rotation },
+        ]);
+
+        setTimeout(() => {
+          setFlyingEmojis((prev) => prev.filter((e) => e.id !== id));
+        }, 2500);
+      }
+    },
+    [currentUserId, room?.members],
+  );
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -334,12 +375,7 @@ export default function RoomPage({
   };
 
   const handleReaction = (emoji: string) => {
-    const { id, left, rotation } = generateReactionContext();
-    setFlyingEmojis((prev) => [...prev, { id, emoji, left, rotation }]);
-
-    setTimeout(() => {
-      setFlyingEmojis((prev) => prev.filter((e) => e.id !== id));
-    }, 2500);
+    socketPlayerRef.current?.sendReaction(emoji);
   };
 
   const handleUpdateSettings = async (e: React.FormEvent) => {
@@ -555,10 +591,12 @@ export default function RoomPage({
             </div>
 
             <SyncedYouTubePlayer
+              ref={socketPlayerRef}
               roomId={roomId}
               videoId={activeVideoId}
               isHost={canControlVideo}
               onOnlineCountChange={setLiveOnlineCount}
+              onChatEvent={handleChatEvent}
             />
           </div>
         </section>
