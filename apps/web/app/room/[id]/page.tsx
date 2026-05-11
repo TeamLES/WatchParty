@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  BookmarkPlusIcon,
   CopyIcon,
   MessageSquareTextIcon,
   MonitorPlayIcon,
@@ -16,7 +17,11 @@ import {
 import { useRouter } from "next/navigation";
 import type {
   AuthMeResponse,
+  CreateHighlightRequest,
+  CreateHighlightResponse,
+  GetHighlightsResponse,
   GetRoomResponse,
+  HighlightResponse,
   RoomMemberResponse,
   ChatMessageEvent,
   ReactionEvent,
@@ -56,13 +61,22 @@ const INITAL_MESSAGES = [
   },
 ];
 
-const generateReactionContext = () => ({
-  id: Date.now() + Math.random(),
-  left: 10 + Math.random() * 80,
-  rotation: Math.floor(Math.random() * 60) - 30,
-});
-
 const EMOJI_LIST = ["😂", "❤️", "🔥", "👀"];
+
+function formatDurationMs(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
 
 export default function RoomPage({
   params,
@@ -96,10 +110,19 @@ export default function RoomPage({
   const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
+  const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
+  const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
+  const [deletingHighlightId, setDeletingHighlightId] = useState<string | null>(
+    null,
+  );
+  const [lastKnownPositionMs, setLastKnownPositionMs] = useState(0);
 
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
+  const localReplayTimerRef = useRef<number | null>(null);
+  const localReplayRestoreTimerRef = useRef<number | null>(null);
   const router = useRouter();
 
   const fetchRoomSnapshot = useCallback(async () => {
@@ -109,6 +132,27 @@ export default function RoomPage({
     }
 
     return (await res.json()) as GetRoomResponse;
+  }, [roomId]);
+
+  const fetchHighlights = useCallback(async () => {
+    setIsLoadingHighlights(true);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/highlights`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch highlights");
+      }
+
+      const data = (await res.json()) as GetHighlightsResponse;
+      setHighlights(data.highlights);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoadingHighlights(false);
+    }
   }, [roomId]);
 
   const formatMemberDisplayName = useCallback((member: RoomMemberResponse) => {
@@ -165,6 +209,31 @@ export default function RoomPage({
   }, [fetchRoomSnapshot, roomId, router]);
 
   const hasRoomLoaded = room !== null;
+
+  useEffect(() => {
+    if (!hasRoomLoaded) {
+      return;
+    }
+
+    void fetchHighlights();
+  }, [fetchHighlights, hasRoomLoaded]);
+
+  useEffect(() => {
+    if (!activeVideoId) {
+      setLastKnownPositionMs(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setLastKnownPositionMs(
+        socketPlayerRef.current?.getCurrentPositionMs() ?? 0,
+      );
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeVideoId]);
 
   // Refresh room members and count periodically while the page is open.
   useEffect(() => {
@@ -330,7 +399,13 @@ export default function RoomPage({
         }, 2500);
       }
     },
-    [currentUserId, room?.members, isFullscreen, isFullscreenChatOpen],
+    [
+      currentUserId,
+      formatMemberDisplayName,
+      room?.members,
+      isFullscreen,
+      isFullscreenChatOpen,
+    ],
   );
 
   useEffect(() => {
@@ -393,6 +468,104 @@ export default function RoomPage({
     socketPlayerRef.current?.sendReaction(emoji);
   };
 
+  const handleCreateHighlight = async () => {
+    const currentPositionMs =
+      socketPlayerRef.current?.getCurrentPositionMs() ?? lastKnownPositionMs;
+
+    if (!activeVideoId || currentPositionMs <= 0) {
+      return;
+    }
+
+    setIsCreatingHighlight(true);
+
+    try {
+      const payload: CreateHighlightRequest = {
+        startMs: Math.max(0, currentPositionMs - 30000),
+        endMs: currentPositionMs,
+        title: `Highlight at ${formatDurationMs(currentPositionMs)}`,
+      };
+      const res = await fetch(`/api/rooms/${roomId}/highlights`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to create highlight");
+      }
+
+      const created = (await res.json()) as CreateHighlightResponse;
+      setHighlights((prev) => [created.highlight, ...prev]);
+      void fetchHighlights();
+    } catch (error) {
+      console.error(error);
+      alert("Unable to save a highlight right now.");
+    } finally {
+      setIsCreatingHighlight(false);
+    }
+  };
+
+  const handlePlayHighlight = (highlight: HighlightResponse) => {
+    if (localReplayTimerRef.current !== null) {
+      window.clearTimeout(localReplayTimerRef.current);
+      localReplayTimerRef.current = null;
+    }
+
+    if (localReplayRestoreTimerRef.current !== null) {
+      window.clearTimeout(localReplayRestoreTimerRef.current);
+      localReplayRestoreTimerRef.current = null;
+    }
+
+    const roomVideoId = extractYoutubeId(room?.videoUrl);
+    const playSegment = () => {
+      socketPlayerRef.current?.playLocalSegment(
+        highlight.startMs,
+        highlight.endMs,
+      );
+    };
+
+    if (highlight.videoId === activeVideoId) {
+      playSegment();
+      return;
+    }
+
+    setActiveVideoId(highlight.videoId);
+    localReplayTimerRef.current = window.setTimeout(playSegment, 900);
+
+    if (roomVideoId) {
+      const segmentLengthMs = Math.max(0, highlight.endMs - highlight.startMs);
+      localReplayRestoreTimerRef.current = window.setTimeout(() => {
+        setActiveVideoId(roomVideoId);
+      }, segmentLengthMs + 1600);
+    }
+  };
+
+  const handleDeleteHighlight = async (highlightId: string) => {
+    setDeletingHighlightId(highlightId);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/highlights/${highlightId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete highlight");
+      }
+
+      setHighlights((prev) =>
+        prev.filter((highlight) => highlight.highlightId !== highlightId),
+      );
+      void fetchHighlights();
+    } catch (error) {
+      console.error(error);
+      alert("Unable to delete this highlight right now.");
+    } finally {
+      setDeletingHighlightId(null);
+    }
+  };
+
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!room?.isHost || !editTitle.trim() || editTitle === room.title) {
@@ -418,6 +591,18 @@ export default function RoomPage({
       alert("Error updating room settings.");
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (localReplayTimerRef.current !== null) {
+        window.clearTimeout(localReplayTimerRef.current);
+      }
+
+      if (localReplayRestoreTimerRef.current !== null) {
+        window.clearTimeout(localReplayRestoreTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleKickMember = async (memberUserId: string) => {
     if (!room?.isHost) {
@@ -550,6 +735,25 @@ export default function RoomPage({
                   <SettingsIcon className="size-5" />
                 </Button>
               </div>
+            </div>
+
+            <div className="flex justify-end border-t border-border/50 pt-4 dark:border-white/5">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-10 rounded-xl border border-primary/20 bg-primary/10 font-semibold text-primary hover:bg-primary/20"
+                onClick={() => void handleCreateHighlight()}
+                disabled={
+                  !activeVideoId ||
+                  lastKnownPositionMs <= 0 ||
+                  isCreatingHighlight
+                }
+              >
+                <BookmarkPlusIcon className="size-4" />
+                <span>
+                  {isCreatingHighlight ? "Saving..." : "Save highlight"}
+                </span>
+              </Button>
             </div>
 
             {/* Bottom row: Video Control Panel */}
@@ -720,7 +924,98 @@ export default function RoomPage({
         {/* Live Chat Column */}
         <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 h-125 lg:h-auto pb-2">
           {!isFullscreen && (
-            <div className="glass-card panel-surface flex h-full flex-col overflow-hidden rounded-3xl shadow-lg">
+            <>
+              <div className="glass-card panel-surface flex max-h-72 shrink-0 flex-col overflow-hidden rounded-3xl shadow-lg">
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
+                  <div className="flex items-center gap-2">
+                    <BookmarkPlusIcon className="size-5 text-primary" />
+                    <h2 className="text-lg font-semibold">Highlights</h2>
+                  </div>
+                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                    {highlights.length}
+                  </span>
+                </div>
+
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10">
+                  {isLoadingHighlights ? (
+                    <p className="text-sm text-muted-foreground">
+                      Loading highlights...
+                    </p>
+                  ) : highlights.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No highlights saved yet.
+                    </p>
+                  ) : (
+                    highlights.map((highlight) => {
+                      const creator = room.members.find(
+                        (member) => member.userId === highlight.createdByUserId,
+                      );
+                      const creatorLabel = creator
+                        ? formatMemberDisplayName(creator)
+                        : `User ${highlight.createdByUserId.slice(0, 8)}`;
+                      const canDeleteHighlight =
+                        currentUserId === highlight.createdByUserId ||
+                        room.isHost;
+
+                      return (
+                        <div
+                          key={highlight.highlightId}
+                          className="rounded-2xl border border-border/60 bg-card/80 p-3 dark:border-white/10 dark:bg-white/10"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">
+                                {highlight.title ?? "Untitled highlight"}
+                              </p>
+                              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                                {formatDurationMs(highlight.startMs)} -{" "}
+                                {formatDurationMs(highlight.endMs)}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-muted-foreground">
+                                by {creatorLabel}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
+                                onClick={() => handlePlayHighlight(highlight)}
+                                title="Play highlight"
+                              >
+                                <PlayIcon className="size-4 fill-current" />
+                              </Button>
+                              {canDeleteHighlight && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-500"
+                                  onClick={() =>
+                                    void handleDeleteHighlight(
+                                      highlight.highlightId,
+                                    )
+                                  }
+                                  disabled={
+                                    deletingHighlightId ===
+                                    highlight.highlightId
+                                  }
+                                  title="Delete highlight"
+                                >
+                                  <TrashIcon className="size-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="glass-card panel-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl shadow-lg">
               {/* Chat Header */}
               <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
                 <div className="flex items-center gap-2">
@@ -803,6 +1098,7 @@ export default function RoomPage({
                 </form>
               </div>
             </div>
+            </>
           )}
         </aside>
       </main>

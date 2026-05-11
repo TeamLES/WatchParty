@@ -112,6 +112,7 @@ DDB_ROOMS_TABLE=rooms
 DDB_ROOM_MEMBERS_TABLE=room-members
 DDB_INVITES_TABLE=invites
 DDB_CHAT_MESSAGES_TABLE=chat-messages
+DDB_HIGHLIGHTS_TABLE=highlights
 DDB_WS_CONNECTIONS_TABLE=websocket-connections
 DDB_PLAYBACK_SNAPSHOTS_TABLE=playback-snapshots
 DDB_REACTION_EVENTS_TABLE=reaction-events
@@ -194,6 +195,7 @@ Task execution role responsibilities:
 Task role responsibilities:
 
 - Allow the backend API to access DynamoDB tables.
+- Include `arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights` and `arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights/index/*` for highlight CRUD and lookup by `highlight-id-index`.
 
 ## CloudWatch
 
@@ -230,6 +232,7 @@ Tables used:
 - `room-members`
 - `invites`
 - `chat-messages`
+- `highlights`
 - `websocket-connections`
 - `playback-snapshots`
 - `reaction-events`

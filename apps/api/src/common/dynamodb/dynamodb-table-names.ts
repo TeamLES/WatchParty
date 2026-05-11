@@ -10,6 +10,7 @@ export const DYNAMODB_TABLE_ENV_KEYS = {
   roomMembers: 'DDB_ROOM_MEMBERS_TABLE',
   invites: 'DDB_INVITES_TABLE',
   chatMessages: 'DDB_CHAT_MESSAGES_TABLE',
+  highlights: 'DDB_HIGHLIGHTS_TABLE',
   wsConnections: 'DDB_WS_CONNECTIONS_TABLE',
   playbackSnapshots: 'DDB_PLAYBACK_SNAPSHOTS_TABLE',
   reactionEvents: 'DDB_REACTION_EVENTS_TABLE',
@@ -30,6 +31,7 @@ export function resolveDynamoDbTableNames(
     roomMembers: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.roomMembers),
     invites: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.invites),
     chatMessages: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.chatMessages),
+    highlights: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.highlights),
     wsConnections: readEnv(
       configService,
       DYNAMODB_TABLE_ENV_KEYS.wsConnections,
@@ -89,6 +91,7 @@ export function logDynamoDbTables(
       `roomMembers:${tableNames.roomMembers ?? '(unset)'}`,
       `invites:${tableNames.invites ?? '(unset)'}`,
       `chatMessages:${tableNames.chatMessages ?? '(unset)'}`,
+      `highlights:${tableNames.highlights ?? '(unset)'}`,
       `wsConnections:${tableNames.wsConnections ?? '(unset)'}`,
       `playbackSnapshots:${tableNames.playbackSnapshots ?? '(unset)'}`,
       `reactionEvents:${tableNames.reactionEvents ?? '(unset)'}`,

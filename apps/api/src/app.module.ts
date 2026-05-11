@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
+import { HighlightsModule } from './modules/highlights/highlights.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { RoomsModule } from './modules/rooms/rooms.module';
     }),
     AuthModule,
     RoomsModule,
+    HighlightsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

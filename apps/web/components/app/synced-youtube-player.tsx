@@ -41,6 +41,8 @@ import { Button } from "@/components/ui/button";
 type SocketStatus = "idle" | "connecting" | "connected" | "unavailable";
 
 export interface SyncedYouTubePlayerRef {
+  getCurrentPositionMs: () => number;
+  playLocalSegment: (startMs: number, endMs: number) => void;
   sendChatMessage: (text: string) => void;
   sendReaction: (emoji: string) => void;
 }
@@ -207,6 +209,8 @@ export const SyncedYouTubePlayer = forwardRef<
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const applyingRemoteRef = useRef(false);
+  const localSegmentActiveRef = useRef(false);
+  const localSegmentTimerRef = useRef<number | null>(null);
   const sequenceRef = useRef(0);
   const positionMsRef = useRef(0);
   const durationMsRef = useRef(0);
@@ -360,7 +364,81 @@ export const SyncedYouTubePlayer = forwardRef<
     return true;
   }, []);
 
+  const clearLocalSegmentTimer = useCallback(() => {
+    if (localSegmentTimerRef.current !== null) {
+      window.clearInterval(localSegmentTimerRef.current);
+      localSegmentTimerRef.current = null;
+    }
+  }, []);
+
+  const finishLocalSegmentPlayback = useCallback(
+    (pauseVideo: boolean) => {
+      clearLocalSegmentTimer();
+
+      const player = playerRef.current;
+      if (pauseVideo && player) {
+        try {
+          player.pauseVideo();
+        } catch {
+          // Ignore transient iframe errors while ending local playback.
+        }
+      }
+
+      setPlaybackState("paused");
+      playbackStateRef.current = "paused";
+
+      window.setTimeout(() => {
+        localSegmentActiveRef.current = false;
+        if (!isHostRef.current) {
+          sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
+        }
+      }, 250);
+    },
+    [clearLocalSegmentTimer, roomId, sendSocketMessage],
+  );
+
+  const playLocalSegment = useCallback(
+    (startMs: number, endMs: number) => {
+      const player = playerRef.current;
+
+      if (!playerReadyRef.current || !player || endMs <= startMs) {
+        return;
+      }
+
+      clearLocalSegmentTimer();
+      localSegmentActiveRef.current = true;
+
+      const boundedStartMs = Math.max(0, startMs);
+      const boundedEndMs = Math.max(boundedStartMs + 1, endMs);
+
+      try {
+        player.seekTo(boundedStartMs / 1000, true);
+        player.playVideo();
+        setPlaybackState("playing");
+        playbackStateRef.current = "playing";
+        setPositionMs(boundedStartMs);
+        positionMsRef.current = boundedStartMs;
+      } catch {
+        finishLocalSegmentPlayback(false);
+        return;
+      }
+
+      localSegmentTimerRef.current = window.setInterval(() => {
+        const currentPositionMs = readPositionMs();
+        setPositionMs(currentPositionMs);
+        positionMsRef.current = currentPositionMs;
+
+        if (currentPositionMs >= boundedEndMs) {
+          finishLocalSegmentPlayback(true);
+        }
+      }, 250);
+    },
+    [clearLocalSegmentTimer, finishLocalSegmentPlayback, readPositionMs],
+  );
+
   useImperativeHandle(ref, () => ({
+    getCurrentPositionMs: () => readPositionMs(),
+    playLocalSegment,
     sendChatMessage: (text: string) => {
       sendSocketMessage({
         action: "chatMessage",
@@ -417,6 +495,7 @@ export const SyncedYouTubePlayer = forwardRef<
     (event: PlaybackSnapshotEvent | PlaybackSyncEvent) => {
       if (
         isHostRef.current ||
+        localSegmentActiveRef.current ||
         !playerReadyRef.current ||
         event.roomId !== roomId
       ) {
@@ -642,6 +721,24 @@ export const SyncedYouTubePlayer = forwardRef<
                 return;
               }
 
+              if (localSegmentActiveRef.current) {
+                if (event.data === youtube.PlayerState.PLAYING) {
+                  setPlaybackState("playing");
+                  playbackStateRef.current = "playing";
+                }
+
+                if (
+                  event.data === youtube.PlayerState.PAUSED ||
+                  event.data === youtube.PlayerState.ENDED
+                ) {
+                  setPlaybackState("paused");
+                  playbackStateRef.current = "paused";
+                }
+
+                refreshPlayerClock();
+                return;
+              }
+
               if (event.data === youtube.PlayerState.PLAYING) {
                 if (
                   playbackStateRef.current !== "playing" &&
@@ -677,6 +774,7 @@ export const SyncedYouTubePlayer = forwardRef<
 
     return () => {
       isCancelled = true;
+      finishLocalSegmentPlayback(false);
       playerRef.current?.destroy();
       playerRef.current = null;
       mount.innerHTML = "";
@@ -684,6 +782,7 @@ export const SyncedYouTubePlayer = forwardRef<
     };
   }, [
     applySavedVolumeToPlayer,
+    finishLocalSegmentPlayback,
     isHost,
     refreshPlayerClock,
     roomId,
@@ -702,6 +801,12 @@ export const SyncedYouTubePlayer = forwardRef<
       window.clearInterval(interval);
     };
   }, [playerReady, refreshPlayerClock]);
+
+  useEffect(() => {
+    return () => {
+      clearLocalSegmentTimer();
+    };
+  }, [clearLocalSegmentTimer]);
 
   useEffect(() => {
     if (!isHost || !playerReady) {

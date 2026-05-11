@@ -11,7 +11,7 @@ This guide deploys the current WatchParty monorepo as:
 The screenshots show these already exist in `eu-central-1`:
 
 - Cognito user pool `eu-central-1_6ohxnBvfL`
-- DynamoDB tables: `users`, `rooms`, `room-members`, `invites`, `chat-messages`, `websocket-connections`, `playback-snapshots`, `reaction-events`, `scheduled-parties`, `idempotency-events`
+- DynamoDB tables: `users`, `rooms`, `room-members`, `invites`, `chat-messages`, `highlights`, `websocket-connections`, `playback-snapshots`, `reaction-events`, `scheduled-parties`, `idempotency-events`
 - API Gateway WebSocket API `watchparty-ws`
 - Lambda functions `watchparty-ws-router` and `watchparty-ws-authorizer`
 
@@ -82,6 +82,7 @@ DDB_ROOMS_TABLE=rooms
 DDB_ROOM_MEMBERS_TABLE=room-members
 DDB_INVITES_TABLE=invites
 DDB_CHAT_MESSAGES_TABLE=chat-messages
+DDB_HIGHLIGHTS_TABLE=highlights
 DDB_WS_CONNECTIONS_TABLE=websocket-connections
 DDB_PLAYBACK_SNAPSHOTS_TABLE=playback-snapshots
 DDB_REACTION_EVENTS_TABLE=reaction-events
@@ -282,6 +283,8 @@ Add inline policy:
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/invites/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/chat-messages",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/chat-messages/index/*",
+        "arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights",
+        "arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/websocket-connections",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/websocket-connections/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/playback-snapshots",

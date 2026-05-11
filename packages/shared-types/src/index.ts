@@ -1,6 +1,14 @@
 export type { AuthMeResponse } from "./auth.js";
 
 export type {
+  CreateHighlightRequest,
+  CreateHighlightResponse,
+  GetHighlightsResponse,
+  HighlightResponse,
+  HighlightVideoProvider,
+} from "./highlights.js";
+
+export type {
   CreateRoomInviteResponse,
   CreateRoomResponse,
   GetRoomMembersResponse,
