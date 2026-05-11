@@ -4,8 +4,11 @@ export type {
   CreateHighlightRequest,
   CreateHighlightResponse,
   GetHighlightsResponse,
+  GetMyHighlightsResponse,
   HighlightResponse,
   HighlightVideoProvider,
+  UpdateHighlightRequest,
+  UpdateHighlightResponse,
 } from "./highlights.js";
 
 export type {

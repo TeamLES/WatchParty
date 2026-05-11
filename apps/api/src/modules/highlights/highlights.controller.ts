@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UnauthorizedException,
   UseGuards,
@@ -26,6 +27,7 @@ import {
 import type {
   CreateHighlightResponse,
   GetHighlightsResponse,
+  UpdateHighlightResponse,
 } from '@watchparty/shared-types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CognitoAuthGuard } from '../../common/guards/cognito-auth.guard';
@@ -33,6 +35,7 @@ import type { VerifiedCognitoAccessToken } from '../auth/cognito-jwt-verifier.se
 import { RoomIdParamDto } from '../rooms/dto/room-id-param.dto';
 import { CreateHighlightDto } from './dto/create-highlight.dto';
 import { HighlightIdParamDto } from './dto/highlight-id-param.dto';
+import { UpdateHighlightDto } from './dto/update-highlight.dto';
 import { HighlightsService } from './highlights.service';
 
 @Controller('api/rooms/:roomId/highlights')
@@ -111,6 +114,32 @@ export class HighlightsController {
     );
 
     return { message: 'Highlight deleted successfully' };
+  }
+
+  @Patch(':highlightId')
+  @ApiOperation({ summary: 'Update a room highlight title or note' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiParam({ name: 'highlightId', type: String })
+  @ApiBody({ type: UpdateHighlightDto })
+  @ApiOkResponse({ description: 'Highlight updated' })
+  @ApiBadRequestResponse({ description: 'Invalid highlight payload' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({
+    description: 'Only creator can update the highlight',
+  })
+  @ApiNotFoundResponse({ description: 'Room or highlight not found' })
+  async updateHighlight(
+    @Param() params: HighlightIdParamDto,
+    @Body() updateHighlightDto: UpdateHighlightDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<UpdateHighlightResponse> {
+    const userId = this.getRequiredUserSub(user);
+    return this.highlightsService.updateHighlight(
+      params.roomId,
+      params.highlightId,
+      userId,
+      updateHighlightDto,
+    );
   }
 
   private getRequiredUserSub(user: VerifiedCognitoAccessToken | null): string {

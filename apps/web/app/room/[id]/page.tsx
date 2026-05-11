@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BookmarkPlusIcon,
   CopyIcon,
+  Edit3Icon,
   MessageSquareTextIcon,
   MonitorPlayIcon,
   PlayIcon,
@@ -25,6 +26,8 @@ import type {
   RoomMemberResponse,
   ChatMessageEvent,
   ReactionEvent,
+  UpdateHighlightRequest,
+  UpdateHighlightResponse,
 } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
@@ -62,6 +65,7 @@ const INITAL_MESSAGES = [
 ];
 
 const EMOJI_LIST = ["😂", "❤️", "🔥", "👀"];
+const HIGHLIGHT_BACK_SECONDS_OPTIONS = [10, 30, 60, 90, 120];
 
 function formatDurationMs(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -113,9 +117,16 @@ export default function RoomPage({
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
   const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
+  const [isHighlightSaved, setIsHighlightSaved] = useState(false);
+  const [highlightBackSeconds, setHighlightBackSeconds] = useState(30);
   const [deletingHighlightId, setDeletingHighlightId] = useState<string | null>(
     null,
   );
+  const [editingHighlight, setEditingHighlight] =
+    useState<HighlightResponse | null>(null);
+  const [highlightEditTitle, setHighlightEditTitle] = useState("");
+  const [highlightEditNote, setHighlightEditNote] = useState("");
+  const [isSavingHighlightEdit, setIsSavingHighlightEdit] = useState(false);
   const [lastKnownPositionMs, setLastKnownPositionMs] = useState(0);
 
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
@@ -477,10 +488,12 @@ export default function RoomPage({
     }
 
     setIsCreatingHighlight(true);
+    setIsHighlightSaved(false);
 
     try {
+      const backMs = highlightBackSeconds * 1000;
       const payload: CreateHighlightRequest = {
-        startMs: Math.max(0, currentPositionMs - 30000),
+        startMs: Math.max(0, currentPositionMs - backMs),
         endMs: currentPositionMs,
         title: `Highlight at ${formatDurationMs(currentPositionMs)}`,
       };
@@ -498,12 +511,78 @@ export default function RoomPage({
 
       const created = (await res.json()) as CreateHighlightResponse;
       setHighlights((prev) => [created.highlight, ...prev]);
+      setIsHighlightSaved(true);
+      window.setTimeout(() => setIsHighlightSaved(false), 1800);
       void fetchHighlights();
     } catch (error) {
       console.error(error);
       alert("Unable to save a highlight right now.");
     } finally {
       setIsCreatingHighlight(false);
+    }
+  };
+
+  const openHighlightEditModal = (highlight: HighlightResponse) => {
+    setEditingHighlight(highlight);
+    setHighlightEditTitle(highlight.title ?? "");
+    setHighlightEditNote(highlight.note ?? "");
+  };
+
+  const closeHighlightEditModal = () => {
+    if (isSavingHighlightEdit) {
+      return;
+    }
+
+    setEditingHighlight(null);
+    setHighlightEditTitle("");
+    setHighlightEditNote("");
+  };
+
+  const handleUpdateHighlight = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!editingHighlight) {
+      return;
+    }
+
+    setIsSavingHighlightEdit(true);
+
+    try {
+      const payload: UpdateHighlightRequest = {
+        title: highlightEditTitle,
+        note: highlightEditNote,
+      };
+      const res = await fetch(
+        `/api/rooms/${roomId}/highlights/${editingHighlight.highlightId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to update highlight");
+      }
+
+      const data = (await res.json()) as UpdateHighlightResponse;
+      setHighlights((prev) =>
+        prev.map((highlight) =>
+          highlight.highlightId === data.highlight.highlightId
+            ? data.highlight
+            : highlight,
+        ),
+      );
+      setEditingHighlight(null);
+      setHighlightEditTitle("");
+      setHighlightEditNote("");
+    } catch (error) {
+      console.error(error);
+      alert("Unable to update this highlight right now.");
+    } finally {
+      setIsSavingHighlightEdit(false);
     }
   };
 
@@ -656,6 +735,10 @@ export default function RoomPage({
   // If API does not send isHost yet, keep controls available instead of hiding the input.
   const canControlVideo = typeof room.isHost === "boolean" ? room.isHost : true;
   const watchingCount = liveOnlineCount ?? room.onlineCount ?? 0;
+  const highlightPreviewStartMs = Math.max(
+    0,
+    lastKnownPositionMs - highlightBackSeconds * 1000,
+  );
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
@@ -737,7 +820,27 @@ export default function RoomPage({
               </div>
             </div>
 
-            <div className="flex justify-end border-t border-border/50 pt-4 dark:border-white/5">
+            <div className="flex flex-col gap-3 border-t border-border/50 pt-4 dark:border-white/5 sm:flex-row sm:items-center sm:justify-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={highlightBackSeconds}
+                  onChange={(event) =>
+                    setHighlightBackSeconds(Number(event.target.value))
+                  }
+                  className="h-10 rounded-xl border border-border/70 bg-background/75 px-3 text-sm font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/30 dark:border-white/10 dark:bg-black/20"
+                  aria-label="Highlight length"
+                >
+                  {HIGHLIGHT_BACK_SECONDS_OPTIONS.map((seconds) => (
+                    <option key={seconds} value={seconds}>
+                      {seconds}s
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Will save {formatDurationMs(highlightPreviewStartMs)} -{" "}
+                  {formatDurationMs(lastKnownPositionMs)}
+                </p>
+              </div>
               <Button
                 variant="secondary"
                 size="sm"
@@ -751,7 +854,11 @@ export default function RoomPage({
               >
                 <BookmarkPlusIcon className="size-4" />
                 <span>
-                  {isCreatingHighlight ? "Saving..." : "Save highlight"}
+                  {isCreatingHighlight
+                    ? "Saving..."
+                    : isHighlightSaved
+                      ? "Saved"
+                      : `Save last ${highlightBackSeconds}s`}
                 </span>
               </Button>
             </div>
@@ -956,6 +1063,8 @@ export default function RoomPage({
                       const canDeleteHighlight =
                         currentUserId === highlight.createdByUserId ||
                         room.isHost;
+                      const canEditHighlight =
+                        currentUserId === highlight.createdByUserId;
 
                       return (
                         <div
@@ -986,6 +1095,20 @@ export default function RoomPage({
                               >
                                 <PlayIcon className="size-4 fill-current" />
                               </Button>
+                              {canEditHighlight && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-white/10"
+                                  onClick={() =>
+                                    openHighlightEditModal(highlight)
+                                  }
+                                  title="Edit highlight"
+                                >
+                                  <Edit3Icon className="size-4" />
+                                </Button>
+                              )}
                               {canDeleteHighlight && (
                                 <Button
                                   type="button"
@@ -1161,6 +1284,57 @@ export default function RoomPage({
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={editingHighlight !== null}
+        onClose={closeHighlightEditModal}
+        title="Edit highlight"
+      >
+        <form onSubmit={handleUpdateHighlight} className="flex flex-col gap-5">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-muted-foreground">
+              Title
+            </label>
+            <Input
+              value={highlightEditTitle}
+              onChange={(event) => setHighlightEditTitle(event.target.value)}
+              maxLength={120}
+              className="h-11 rounded-xl border-border/70 bg-background/75 focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/30"
+              placeholder="Untitled highlight"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-muted-foreground">
+              Note
+            </label>
+            <textarea
+              value={highlightEditNote}
+              onChange={(event) => setHighlightEditNote(event.target.value)}
+              maxLength={500}
+              className="min-h-28 w-full resize-none rounded-xl border border-border/70 bg-background/75 px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/30 dark:border-white/10 dark:bg-black/30"
+              placeholder="Add a note..."
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeHighlightEditModal}
+              disabled={isSavingHighlightEdit}
+              className="flex-1 rounded-xl hover:bg-accent dark:hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSavingHighlightEdit}
+              className="flex-1 rounded-xl"
+            >
+              {isSavingHighlightEdit ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       <Modal

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MonitorPlayIcon } from "lucide-react";
+import { BookmarkIcon, MonitorPlayIcon } from "lucide-react";
 
 import { getCurrentUserFromApi } from "@/lib/auth";
 
@@ -55,10 +55,19 @@ export async function AuthenticatedHeader() {
           </div>
         </Link>
 
-        <AuthenticatedUserMenu
-          userLabel={userLabel}
-          initials={toInitials(userLabel)}
-        />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/highlights"
+            className="hidden h-9 items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 sm:flex"
+          >
+            <BookmarkIcon className="size-4" />
+            My Highlights
+          </Link>
+          <AuthenticatedUserMenu
+            userLabel={userLabel}
+            initials={toInitials(userLabel)}
+          />
+        </div>
       </div>
     </header>
   );

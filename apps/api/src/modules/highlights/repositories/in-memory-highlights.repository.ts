@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import type { Highlight } from '../entities/highlight.entity';
-import type { HighlightsRepository } from './highlights.repository';
+import type {
+  HighlightsRepository,
+  UpdateHighlightInput,
+} from './highlights.repository';
 
 @Injectable()
 export class InMemoryHighlightsRepository implements HighlightsRepository {
@@ -53,6 +56,50 @@ export class InMemoryHighlightsRepository implements HighlightsRepository {
     this.logger.log(`getHighlightById highlightId=${highlightId}`);
     const highlight = this.highlightsById.get(highlightId);
     return Promise.resolve(highlight ? this.cloneHighlight(highlight) : null);
+  }
+
+  findByCreatorUserId(userId: string): Promise<Highlight[]> {
+    this.logger.log(`findByCreatorUserId userId=${userId}`);
+
+    return Promise.resolve(
+      Array.from(this.highlightsById.values())
+        .filter((highlight) => highlight.createdByUserId === userId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((highlight) => this.cloneHighlight(highlight)),
+    );
+  }
+
+  async updateHighlight(input: UpdateHighlightInput): Promise<Highlight> {
+    this.logger.log(`updateHighlight highlightId=${input.highlightId}`);
+    const existing = this.highlightsById.get(input.highlightId);
+
+    if (!existing) {
+      throw new Error(`Highlight ${input.highlightId} does not exist`);
+    }
+
+    const updated: Highlight = {
+      ...existing,
+      ...(input.shouldUpdateTitle && input.title
+        ? { title: input.title }
+        : {}),
+      ...(input.shouldUpdateNote && input.note ? { note: input.note } : {}),
+      updatedAt: input.updatedAt,
+    };
+
+    if (input.shouldUpdateTitle && !input.title) {
+      delete updated.title;
+    }
+
+    if (input.shouldUpdateNote && !input.note) {
+      delete updated.note;
+    }
+
+    this.highlightsById.set(updated.highlightId, this.cloneHighlight(updated));
+    this.highlightsByRoomId
+      .get(updated.roomId)
+      ?.set(updated.createdAtHighlightId, this.cloneHighlight(updated));
+
+    return this.cloneHighlight(updated);
   }
 
   deleteHighlight(highlight: Highlight): Promise<void> {

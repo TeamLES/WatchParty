@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ChevronDownIcon,
+  BookmarkIcon,
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
@@ -100,6 +101,15 @@ export function AuthenticatedUserMenu({
             System
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem asChild className="gap-2">
+          <Link href="/highlights">
+            <BookmarkIcon className="size-4" />
+            My Highlights
+          </Link>
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

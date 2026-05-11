@@ -11,11 +11,14 @@ import { randomUUID } from 'crypto';
 import type {
   CreateHighlightResponse,
   GetHighlightsResponse,
+  GetMyHighlightsResponse,
   HighlightResponse,
+  UpdateHighlightResponse,
 } from '@watchparty/shared-types';
 import { ROOMS_REPOSITORY } from '../rooms/constants/rooms-repository.token';
 import type { RoomsRepository } from '../rooms/repositories/rooms.repository';
 import type { CreateHighlightDto } from './dto/create-highlight.dto';
+import type { UpdateHighlightDto } from './dto/update-highlight.dto';
 import type { Highlight } from './entities/highlight.entity';
 import {
   HIGHLIGHTS_REPOSITORY,
@@ -114,6 +117,67 @@ export class HighlightsService {
       highlights: highlights.map((highlight) =>
         this.toHighlightResponse(highlight),
       ),
+    };
+  }
+
+  async getMyHighlights(userId: string): Promise<GetMyHighlightsResponse> {
+    this.logger.log(`getMyHighlights userId=${userId}`);
+    const highlights =
+      await this.highlightsRepository.findByCreatorUserId(userId);
+
+    return {
+      highlights: highlights.map((highlight) =>
+        this.toHighlightResponse(highlight),
+      ),
+    };
+  }
+
+  async updateHighlight(
+    roomId: string,
+    highlightId: string,
+    userId: string,
+    updateHighlightDto: UpdateHighlightDto,
+  ): Promise<UpdateHighlightResponse> {
+    this.logger.log(
+      `updateHighlight roomId=${roomId} highlightId=${highlightId} userId=${userId}`,
+    );
+    const highlight =
+      await this.highlightsRepository.getHighlightById(highlightId);
+
+    if (!highlight || highlight.roomId !== roomId) {
+      throw new NotFoundException('Highlight not found');
+    }
+
+    if (highlight.createdByUserId !== userId) {
+      throw new ForbiddenException(
+        'Only the highlight creator can update this highlight',
+      );
+    }
+
+    const shouldUpdateTitle = Object.prototype.hasOwnProperty.call(
+      updateHighlightDto,
+      'title',
+    );
+    const shouldUpdateNote = Object.prototype.hasOwnProperty.call(
+      updateHighlightDto,
+      'note',
+    );
+
+    if (!shouldUpdateTitle && !shouldUpdateNote) {
+      throw new BadRequestException('At least one highlight field is required');
+    }
+
+    const updatedHighlight = await this.highlightsRepository.updateHighlight({
+      highlightId,
+      ...(updateHighlightDto.title ? { title: updateHighlightDto.title } : {}),
+      ...(updateHighlightDto.note ? { note: updateHighlightDto.note } : {}),
+      shouldUpdateTitle,
+      shouldUpdateNote,
+      updatedAt: this.nowIsoString(),
+    });
+
+    return {
+      highlight: this.toHighlightResponse(updatedHighlight),
     };
   }
 

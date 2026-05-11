@@ -30,3 +30,16 @@ export interface CreateHighlightResponse {
 export interface GetHighlightsResponse {
   highlights: HighlightResponse[];
 }
+
+export interface UpdateHighlightRequest {
+  title?: string;
+  note?: string;
+}
+
+export interface UpdateHighlightResponse {
+  highlight: HighlightResponse;
+}
+
+export interface GetMyHighlightsResponse {
+  highlights: HighlightResponse[];
+}

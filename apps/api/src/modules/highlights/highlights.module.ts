@@ -6,6 +6,7 @@ import { normalizeRoomsRepositoryDriver } from '../rooms/constants/rooms-reposit
 import { RoomsModule } from '../rooms/rooms.module';
 import { HighlightsController } from './highlights.controller';
 import { HighlightsService } from './highlights.service';
+import { MyHighlightsController } from './my-highlights.controller';
 import { DynamoDBHighlightsRepository } from './repositories/dynamodb-highlights.repository';
 import {
   HIGHLIGHTS_REPOSITORY,
@@ -15,7 +16,7 @@ import { InMemoryHighlightsRepository } from './repositories/in-memory-highlight
 
 @Module({
   imports: [ConfigModule, AuthModule, RoomsModule],
-  controllers: [HighlightsController],
+  controllers: [HighlightsController, MyHighlightsController],
   providers: [
     HighlightsService,
     InMemoryHighlightsRepository,

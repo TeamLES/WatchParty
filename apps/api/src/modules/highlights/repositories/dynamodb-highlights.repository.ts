@@ -4,6 +4,7 @@ import {
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   Injectable,
@@ -22,9 +23,13 @@ import {
   fromHighlightItem,
   toHighlightItem,
 } from '../mappers/highlights-dynamodb.mapper';
-import type { HighlightsRepository } from './highlights.repository';
+import type {
+  HighlightsRepository,
+  UpdateHighlightInput,
+} from './highlights.repository';
 
 const HIGHLIGHT_ID_INDEX_NAME = 'highlight-id-index';
+const CREATOR_HIGHLIGHTS_INDEX_NAME = 'creator-highlights-index';
 
 @Injectable()
 export class DynamoDBHighlightsRepository implements HighlightsRepository {
@@ -171,6 +176,119 @@ export class DynamoDBHighlightsRepository implements HighlightsRepository {
     return fromHighlightItem(asRecord(response.Items?.[0]));
   }
 
+  async findByCreatorUserId(userId: string): Promise<Highlight[]> {
+    this.logger.log(`findByCreatorUserId userId=${userId}`);
+    const highlights: Highlight[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    try {
+      do {
+        const response = await this.documentClient.send(
+          new QueryCommand({
+            TableName: this.tables.highlights,
+            IndexName: CREATOR_HIGHLIGHTS_INDEX_NAME,
+            KeyConditionExpression: 'createdByUserId = :userId',
+            ExpressionAttributeValues: {
+              ':userId': userId,
+            },
+            ScanIndexForward: false,
+            ...(lastEvaluatedKey
+              ? { ExclusiveStartKey: lastEvaluatedKey }
+              : {}),
+          }),
+        );
+
+        highlights.push(
+          ...(response.Items ?? [])
+            .map((item) => fromHighlightItem(asRecord(item)))
+            .filter((highlight): highlight is Highlight => highlight !== null),
+        );
+        lastEvaluatedKey = asRecord(response.LastEvaluatedKey);
+      } while (lastEvaluatedKey);
+    } catch (error) {
+      throw this.toInfrastructureException('findByCreatorUserId', error);
+    }
+
+    return highlights;
+  }
+
+  async updateHighlight(input: UpdateHighlightInput): Promise<Highlight> {
+    this.logger.log(`updateHighlight highlightId=${input.highlightId}`);
+    const existing = await this.getHighlightById(input.highlightId);
+
+    if (!existing) {
+      throw new Error(`Highlight ${input.highlightId} does not exist`);
+    }
+
+    const expressionAttributeNames: Record<string, string> = {
+      '#updatedAt': 'updatedAt',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':updatedAt': input.updatedAt,
+    };
+    const setExpressions = ['#updatedAt = :updatedAt'];
+    const removeExpressions: string[] = [];
+
+    if (input.shouldUpdateTitle) {
+      expressionAttributeNames['#title'] = 'title';
+
+      if (input.title) {
+        expressionAttributeValues[':title'] = input.title;
+        setExpressions.push('#title = :title');
+      } else {
+        removeExpressions.push('#title');
+      }
+    }
+
+    if (input.shouldUpdateNote) {
+      expressionAttributeNames['#note'] = 'note';
+
+      if (input.note) {
+        expressionAttributeValues[':note'] = input.note;
+        setExpressions.push('#note = :note');
+      } else {
+        removeExpressions.push('#note');
+      }
+    }
+
+    const updateExpression = [
+      `SET ${setExpressions.join(', ')}`,
+      removeExpressions.length > 0
+        ? `REMOVE ${removeExpressions.join(', ')}`
+        : null,
+    ]
+      .filter((expression): expression is string => expression !== null)
+      .join(' ');
+
+    let response;
+
+    try {
+      response = await this.documentClient.send(
+        new UpdateCommand({
+          TableName: this.tables.highlights,
+          Key: {
+            roomId: existing.roomId,
+            createdAtHighlightId: existing.createdAtHighlightId,
+          },
+          UpdateExpression: updateExpression,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ReturnValues: 'ALL_NEW',
+        }),
+      );
+    } catch (error) {
+      throw this.toInfrastructureException('updateHighlight', error);
+    }
+
+    const updated = fromHighlightItem(asRecord(response.Attributes));
+
+    if (!updated) {
+      throw new Error(`Highlight ${input.highlightId} update returned no item`);
+    }
+
+    return updated;
+  }
+
   async deleteHighlight(highlight: Highlight): Promise<void> {
     this.logger.log(
       `deleteHighlight roomId=${highlight.roomId} highlightId=${highlight.highlightId}`,
@@ -209,7 +327,7 @@ export class DynamoDBHighlightsRepository implements HighlightsRepository {
 
     if (errorName === 'ResourceNotFoundException') {
       return new ServiceUnavailableException(
-        `DynamoDB table "${tableName}" or index "${HIGHLIGHT_ID_INDEX_NAME}" was not found in region "${this.region}".`,
+        `DynamoDB table "${tableName}" or a highlights index was not found in region "${this.region}".`,
       );
     }
 
