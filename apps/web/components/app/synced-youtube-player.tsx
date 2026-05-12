@@ -220,6 +220,8 @@ export const SyncedYouTubePlayer = forwardRef<
   const playerReadyRef = useRef(false);
   const isHostRef = useRef(isHost);
   const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
+  const onOnlineCountChangeRef = useRef(onOnlineCountChange);
+  const onChatEventRef = useRef(onChatEvent);
 
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
@@ -268,6 +270,14 @@ export const SyncedYouTubePlayer = forwardRef<
   useEffect(() => {
     mutedRef.current = isMuted;
   }, [isMuted]);
+
+  useEffect(() => {
+    onOnlineCountChangeRef.current = onOnlineCountChange;
+  }, [onOnlineCountChange]);
+
+  useEffect(() => {
+    onChatEventRef.current = onChatEvent;
+  }, [onChatEvent]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -515,6 +525,11 @@ export const SyncedYouTubePlayer = forwardRef<
       const currentPositionMs = readPositionMs();
       const driftMs = Math.abs(currentPositionMs - targetPositionMs);
       const shouldSeek = driftMs > 1500 || event.type === "playback.snapshot";
+      const shouldApplyPlaybackState =
+        event.type === "playback.snapshot" ||
+        (event.type === "playback.sync" &&
+          (event.eventType === "play" || event.eventType === "pause")) ||
+        playbackStateRef.current !== event.state;
 
       applyingRemoteRef.current = true;
 
@@ -523,10 +538,12 @@ export const SyncedYouTubePlayer = forwardRef<
           player.seekTo(targetPositionMs / 1000, true);
         }
 
-        if (event.state === "playing") {
-          player.playVideo();
-        } else {
-          player.pauseVideo();
+        if (shouldApplyPlaybackState) {
+          if (event.state === "playing") {
+            player.playVideo();
+          } else {
+            player.pauseVideo();
+          }
         }
       } finally {
         window.setTimeout(() => {
@@ -535,7 +552,9 @@ export const SyncedYouTubePlayer = forwardRef<
       }
 
       setPlaybackState(event.state);
-      setPositionMs(targetPositionMs);
+      if (shouldSeek || shouldApplyPlaybackState) {
+        setPositionMs(targetPositionMs);
+      }
       sequenceRef.current = Math.max(sequenceRef.current, event.sequence);
     },
     [readPositionMs, roomId],
@@ -555,13 +574,13 @@ export const SyncedYouTubePlayer = forwardRef<
       }
 
       if (message.type === "chat.message" || message.type === "chat.reaction") {
-        onChatEvent?.(message);
+        onChatEventRef.current?.(message);
         return;
       }
 
       if (message.type === "presence.updated" && message.roomId === roomId) {
         setOnlineCount(message.onlineCount);
-        onOnlineCountChange?.(message.onlineCount);
+        onOnlineCountChangeRef.current?.(message.onlineCount);
         return;
       }
 
@@ -574,7 +593,7 @@ export const SyncedYouTubePlayer = forwardRef<
         applyRemotePlayback(message);
       }
     },
-    [applyRemotePlayback, onChatEvent, onOnlineCountChange, roomId],
+    [applyRemotePlayback, roomId],
   );
 
   useEffect(() => {
@@ -633,7 +652,7 @@ export const SyncedYouTubePlayer = forwardRef<
 
           setSocketStatus("connecting");
           setOnlineCount(null);
-          onOnlineCountChange?.(null);
+          onOnlineCountChangeRef.current?.(null);
           reconnectTimerRef.current = window.setTimeout(connect, 2500);
         };
       } catch (error) {
@@ -664,7 +683,7 @@ export const SyncedYouTubePlayer = forwardRef<
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [handleSocketEvent, onOnlineCountChange, roomId, sendSocketMessage]);
+  }, [handleSocketEvent, roomId, sendSocketMessage]);
 
   useEffect(() => {
     const mount = playerMountRef.current;
