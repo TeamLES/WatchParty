@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { BookmarkPlusIcon, Check } from "lucide-react";
-import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -12,7 +11,6 @@ interface HighlightRecorderModalProps {
   onSave: (config: { backSeconds: number; title?: string }) => Promise<void>;
   isLoading?: boolean;
   isSaved?: boolean;
-  previewStartMs: number;
   previewEndMs: number;
 }
 
@@ -39,7 +37,6 @@ const HighlightRecorderModal = ({
   onSave,
   isLoading = false,
   isSaved = false,
-  previewStartMs,
   previewEndMs,
 }: HighlightRecorderModalProps) => {
   const [selectedSeconds, setSelectedSeconds] = useState(30);
@@ -47,6 +44,11 @@ const HighlightRecorderModal = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [animateIn, setAnimateIn] = useState(false);
+
+  const currentPreviewStartMs = Math.max(
+    0,
+    previewEndMs - selectedSeconds * 1000,
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -100,9 +102,13 @@ const HighlightRecorderModal = ({
       >
         <div className="flex items-center justify-between border-b border-border/60 bg-accent/40 px-5 py-4 dark:border-white/10 dark:bg-white/5">
           {isSaved ? (
-            <h2 className="text-lg font-bold text-foreground">Highlight Saved!</h2>
+            <h2 className="text-lg font-bold text-foreground">
+              Highlight Saved!
+            </h2>
           ) : (
-            <h2 className="text-lg font-bold text-foreground">Create Highlight</h2>
+            <h2 className="text-lg font-bold text-foreground">
+              Create Highlight
+            </h2>
           )}
         </div>
 
@@ -138,7 +144,7 @@ const HighlightRecorderModal = ({
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">From</span>
                     <span className="font-mono font-semibold text-primary">
-                      {formatDurationMs(previewStartMs)}
+                      {formatDurationMs(currentPreviewStartMs)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -151,7 +157,7 @@ const HighlightRecorderModal = ({
                   <div className="flex items-center justify-between border-t border-border/30 pt-2 text-sm dark:border-white/5">
                     <span className="text-muted-foreground">Length</span>
                     <span className="font-mono font-semibold">
-                      {formatDurationMs(previewEndMs - previewStartMs)}
+                      {formatDurationMs(previewEndMs - currentPreviewStartMs)}
                     </span>
                   </div>
                 </div>
@@ -182,7 +188,9 @@ const HighlightRecorderModal = ({
                       <Button
                         key={seconds}
                         type="button"
-                        variant={selectedSeconds === seconds ? "default" : "outline"}
+                        variant={
+                          selectedSeconds === seconds ? "default" : "outline"
+                        }
                         className="rounded-lg text-sm font-medium transition-all"
                         onClick={() => setSelectedSeconds(seconds)}
                         disabled={disabled}
@@ -192,7 +200,8 @@ const HighlightRecorderModal = ({
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground/70">
-                    {selectedSeconds}s will be captured from before the current moment.
+                    {selectedSeconds}s will be captured from before the
+                    recorded moment.
                   </p>
                 </div>
 

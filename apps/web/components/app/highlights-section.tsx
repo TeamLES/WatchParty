@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { BookmarkPlusIcon, PlayIcon, Edit3Icon, TrashIcon } from "lucide-react";
+import {
+  BookmarkPlusIcon,
+  PlayIcon,
+  Edit3Icon,
+  RefreshCwIcon,
+  TrashIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HighlightResponse } from "@watchparty/shared-types";
 
@@ -19,6 +25,8 @@ interface HighlightsSectionProps {
   onEditHighlight: (highlight: HighlightResponse) => void;
   onDeleteHighlight: (highlightId: string) => void;
   onRecordHighlight: () => void;
+  onRefreshHighlights: () => void;
+  isRefreshingHighlights?: boolean;
   deletingHighlightId: string | null;
   formatMemberDisplayName: (member: {
     userId: string;
@@ -50,6 +58,8 @@ export function HighlightsSection({
   onEditHighlight,
   onDeleteHighlight,
   onRecordHighlight,
+  onRefreshHighlights,
+  isRefreshingHighlights = false,
   deletingHighlightId,
   formatMemberDisplayName,
 }: HighlightsSectionProps) {
@@ -73,14 +83,30 @@ export function HighlightsSection({
           </div>
         </div>
 
-        <Button
-          type="button"
-          onClick={onRecordHighlight}
-          className="shrink-0 rounded-xl bg-primary px-3 font-semibold text-primary-foreground shadow-[0_0_15px_rgba(232,121,249,0.18)] transition-all hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(232,121,249,0.28)]"
-        >
-          <BookmarkPlusIcon className="mr-2 size-4" />
-          Record
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={onRefreshHighlights}
+            disabled={isRefreshingHighlights}
+            className="h-10 w-10 rounded-xl border-primary/20 bg-background/60 text-primary hover:bg-primary/10"
+            title="Refresh highlights"
+            aria-label="Refresh highlights"
+          >
+            <RefreshCwIcon
+              className={`size-4 ${isRefreshingHighlights ? "animate-spin" : ""}`}
+            />
+          </Button>
+          <Button
+            type="button"
+            onClick={onRecordHighlight}
+            className="rounded-xl bg-primary px-3 font-semibold text-primary-foreground shadow-[0_0_15px_rgba(232,121,249,0.18)] transition-all hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(232,121,249,0.28)]"
+          >
+            <BookmarkPlusIcon className="mr-2 size-4" />
+            Record
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
@@ -114,7 +140,8 @@ export function HighlightsSection({
                 : `User ${highlight.createdByUserId.slice(0, 8)}`;
               const canDeleteHighlight =
                 currentUserId === highlight.createdByUserId || isHostUser;
-              const canEditHighlight = currentUserId === highlight.createdByUserId;
+              const canEditHighlight =
+                currentUserId === highlight.createdByUserId;
               const isExpanded = expandedId === highlight.highlightId;
               const durationLabel = formatDurationMs(
                 highlight.endMs - highlight.startMs,
@@ -125,12 +152,11 @@ export function HighlightsSection({
                   key={highlight.highlightId}
                   className="group overflow-hidden rounded-xl border border-border/50 bg-card/70 transition-all hover:bg-card/90 dark:border-white/10 dark:hover:bg-white/15"
                 >
-                  <button
-                    type="button"
+                  <div
                     onClick={() =>
                       setExpandedId(isExpanded ? null : highlight.highlightId)
                     }
-                    className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-accent/25 dark:hover:bg-white/5"
+                    className="flex w-full cursor-pointer items-start gap-3 p-3 text-left transition-colors hover:bg-accent/25 dark:hover:bg-white/5"
                   >
                     <div className="flex shrink-0 flex-col items-center gap-1">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-[10px] font-bold text-primary ring-1 ring-inset ring-primary/20">
@@ -145,7 +171,8 @@ export function HighlightsSection({
                             {highlight.title ?? "Untitled highlight"}
                           </p>
                           <p className="mt-1 font-mono text-[11px] text-muted-foreground/80">
-                            {formatDurationMs(highlight.startMs)} → {formatDurationMs(highlight.endMs)}
+                            {formatDurationMs(highlight.startMs)} →{" "}
+                            {formatDurationMs(highlight.endMs)}
                           </p>
                         </div>
 
@@ -165,10 +192,13 @@ export function HighlightsSection({
                       </div>
 
                       <p className="mt-1 text-xs text-muted-foreground">
-                        by <span className="font-medium text-primary/80">{creatorLabel}</span>
+                        by{" "}
+                        <span className="font-medium text-primary/80">
+                          {creatorLabel}
+                        </span>
                       </p>
                     </div>
-                  </button>
+                  </div>
 
                   {/* Expanded Details */}
                   {isExpanded && (
@@ -224,7 +254,9 @@ export function HighlightsSection({
                               event.stopPropagation();
                               onDeleteHighlight(highlight.highlightId);
                             }}
-                            disabled={deletingHighlightId === highlight.highlightId}
+                            disabled={
+                              deletingHighlightId === highlight.highlightId
+                            }
                             className="rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-500"
                           >
                             <TrashIcon className="mr-1.5 size-3.5" />

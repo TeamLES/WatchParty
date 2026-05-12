@@ -3,7 +3,6 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  BookmarkPlusIcon,
   CopyIcon,
   MessageSquareTextIcon,
   MonitorPlayIcon,
@@ -37,6 +36,7 @@ import {
   type SyncedYouTubePlayerRef,
 } from "@/components/app/synced-youtube-player";
 import { HighlightRecorderModal } from "@/components/app/highlight-recorder-modal";
+import { HighlightPlayerModal } from "@/components/app/highlight-player-modal";
 import { HighlightsSection } from "@/components/app/highlights-section";
 import { extractYoutubeId } from "@/lib/youtube";
 
@@ -66,7 +66,6 @@ const INITAL_MESSAGES = [
 ];
 
 const EMOJI_LIST = ["😂", "❤️", "🔥", "👀"];
-const HIGHLIGHT_BACK_SECONDS_OPTIONS = [10, 30, 60, 90, 120];
 
 function formatDurationMs(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -117,11 +116,14 @@ export default function RoomPage({
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
   const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
+  const [isRefreshingHighlights, setIsRefreshingHighlights] = useState(false);
   const [showHighlightRecorderModal, setShowHighlightRecorderModal] =
     useState(false);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [isHighlightSaved, setIsHighlightSaved] = useState(false);
-  const [highlightBackSeconds, setHighlightBackSeconds] = useState(30);
+  const [highlightCapturePositionMs, setHighlightCapturePositionMs] = useState<
+    number | null
+  >(null);
   const [deletingHighlightId, setDeletingHighlightId] = useState<string | null>(
     null,
   );
@@ -131,12 +133,15 @@ export default function RoomPage({
   const [highlightEditNote, setHighlightEditNote] = useState("");
   const [isSavingHighlightEdit, setIsSavingHighlightEdit] = useState(false);
   const [lastKnownPositionMs, setLastKnownPositionMs] = useState(0);
+  const [playingHighlight, setPlayingHighlight] = useState<{
+    highlight: HighlightResponse;
+    shouldRender: boolean;
+    animateIn: boolean;
+  } | null>(null);
 
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
-  const localReplayTimerRef = useRef<number | null>(null);
-  const localReplayRestoreTimerRef = useRef<number | null>(null);
   const router = useRouter();
 
   const fetchRoomSnapshot = useCallback(async () => {
@@ -148,27 +153,36 @@ export default function RoomPage({
     return (await res.json()) as GetRoomResponse;
   }, [roomId]);
 
-  const fetchHighlights = useCallback(async () => {
-    setIsLoadingHighlights(true);
+  const fetchHighlights = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? true;
 
-    try {
-      const res = await fetch(`/api/rooms/${roomId}/highlights`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        console.error("Failed to fetch highlights");
-        return;
+      if (showLoading) {
+        setIsLoadingHighlights(true);
       }
 
-      const data = (await res.json()) as GetHighlightsResponse;
-      setHighlights(data.highlights);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoadingHighlights(false);
-    }
-  }, [roomId]);
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/highlights`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          console.error("Failed to fetch highlights");
+          return;
+        }
+
+        const data = (await res.json()) as GetHighlightsResponse;
+        setHighlights(data.highlights);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (showLoading) {
+          setIsLoadingHighlights(false);
+        }
+      }
+    },
+    [roomId],
+  );
 
   const formatMemberDisplayName = useCallback((member: RoomMemberResponse) => {
     const nickname = member.nickname?.trim();
@@ -230,7 +244,7 @@ export default function RoomPage({
       return;
     }
 
-    void fetchHighlights();
+    void fetchHighlights({ showLoading: true });
   }, [fetchHighlights, hasRoomLoaded]);
 
   useEffect(() => {
@@ -485,12 +499,41 @@ export default function RoomPage({
     socketPlayerRef.current?.sendReaction(emoji);
   };
 
+  const handleRefreshHighlights = async () => {
+    setIsRefreshingHighlights(true);
+
+    try {
+      await fetchHighlights({ showLoading: false });
+    } finally {
+      setIsRefreshingHighlights(false);
+    }
+  };
+
+  const readCurrentPlaybackPositionMs = useCallback(() => {
+    return Math.max(
+      0,
+      socketPlayerRef.current?.getCurrentPositionMs() ?? lastKnownPositionMs,
+    );
+  }, [lastKnownPositionMs]);
+
+  const openHighlightRecorder = () => {
+    setHighlightCapturePositionMs(readCurrentPlaybackPositionMs());
+    setIsHighlightSaved(false);
+    setShowHighlightRecorderModal(true);
+  };
+
+  const closeHighlightRecorder = () => {
+    setShowHighlightRecorderModal(false);
+    setHighlightCapturePositionMs(null);
+    setIsHighlightSaved(false);
+  };
+
   const handleCreateHighlight = async (config: {
     backSeconds: number;
     title?: string;
   }) => {
     const currentPositionMs =
-      socketPlayerRef.current?.getCurrentPositionMs() ?? lastKnownPositionMs;
+      highlightCapturePositionMs ?? readCurrentPlaybackPositionMs();
 
     if (!activeVideoId || currentPositionMs <= 0) {
       return;
@@ -504,8 +547,7 @@ export default function RoomPage({
         startMs: Math.max(0, currentPositionMs - backMs),
         endMs: currentPositionMs,
         title:
-          config.title ||
-          `Highlight at ${formatDurationMs(currentPositionMs)}`,
+          config.title || `Highlight at ${formatDurationMs(currentPositionMs)}`,
       };
       const res = await fetch(`/api/rooms/${roomId}/highlights`, {
         method: "POST",
@@ -516,7 +558,9 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        console.error("Failed to create highlight");
+        const errorText = await res.text();
+        console.error("Failed to create highlight", res.status, errorText);
+        alert(`Failed to save highlight: ${res.statusText}`);
         return;
       }
 
@@ -526,8 +570,9 @@ export default function RoomPage({
       window.setTimeout(() => {
         setIsHighlightSaved(false);
         setShowHighlightRecorderModal(false);
+        setHighlightCapturePositionMs(null);
       }, 2500);
-      void fetchHighlights();
+      void fetchHighlights({ showLoading: false });
     } catch (error) {
       console.error(error);
       alert("Unable to save a highlight right now.");
@@ -602,47 +647,37 @@ export default function RoomPage({
   };
 
   const handlePlayHighlight = (highlight: HighlightResponse) => {
-    if (localReplayTimerRef.current !== null) {
-      window.clearTimeout(localReplayTimerRef.current);
-      localReplayTimerRef.current = null;
-    }
-
-    if (localReplayRestoreTimerRef.current !== null) {
-      window.clearTimeout(localReplayRestoreTimerRef.current);
-      localReplayRestoreTimerRef.current = null;
-    }
-
-    const roomVideoId = extractYoutubeId(room?.videoUrl);
-    const playSegment = () => {
-      socketPlayerRef.current?.playLocalSegment(
-        highlight.startMs,
-        highlight.endMs,
+    setPlayingHighlight({
+      highlight,
+      shouldRender: true,
+      animateIn: false,
+    });
+    requestAnimationFrame(() => {
+      setPlayingHighlight((prev) =>
+        prev ? { ...prev, animateIn: true } : null,
       );
-    };
+    });
+  };
 
-    if (highlight.videoId === activeVideoId) {
-      playSegment();
-      return;
-    }
-
-    setActiveVideoId(highlight.videoId);
-    localReplayTimerRef.current = window.setTimeout(playSegment, 900);
-
-    if (roomVideoId) {
-      const segmentLengthMs = Math.max(0, highlight.endMs - highlight.startMs);
-      localReplayRestoreTimerRef.current = window.setTimeout(() => {
-        setActiveVideoId(roomVideoId);
-      }, segmentLengthMs + 1600);
-    }
+  const closePlayModal = () => {
+    setPlayingHighlight((prev) =>
+      prev ? { ...prev, animateIn: false } : null,
+    );
+    setTimeout(() => {
+      setPlayingHighlight(null);
+    }, 220);
   };
 
   const handleDeleteHighlight = async (highlightId: string) => {
     setDeletingHighlightId(highlightId);
 
     try {
-      const res = await fetch(`/api/rooms/${roomId}/highlights/${highlightId}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/rooms/${roomId}/highlights/${highlightId}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (!res.ok) {
         console.error("Failed to delete highlight");
@@ -652,7 +687,7 @@ export default function RoomPage({
       setHighlights((prev) =>
         prev.filter((highlight) => highlight.highlightId !== highlightId),
       );
-      void fetchHighlights();
+      void fetchHighlights({ showLoading: false });
     } catch (error) {
       console.error(error);
       alert("Unable to delete this highlight right now.");
@@ -689,18 +724,6 @@ export default function RoomPage({
       alert("Error updating room settings.");
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (localReplayTimerRef.current !== null) {
-        window.clearTimeout(localReplayTimerRef.current);
-      }
-
-      if (localReplayRestoreTimerRef.current !== null) {
-        window.clearTimeout(localReplayRestoreTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleKickMember = async (memberUserId: string) => {
     if (!room?.isHost) {
@@ -755,10 +778,8 @@ export default function RoomPage({
   // If API does not send isHost yet, keep controls available instead of hiding the input.
   const canControlVideo = room.isHost;
   const watchingCount = liveOnlineCount ?? room.onlineCount ?? 0;
-  const highlightPreviewStartMs = Math.max(
-    0,
-    lastKnownPositionMs - highlightBackSeconds * 1000,
-  );
+  const highlightPreviewEndMs =
+    highlightCapturePositionMs ?? lastKnownPositionMs;
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
@@ -839,8 +860,6 @@ export default function RoomPage({
                 </Button>
               </div>
             </div>
-
-
 
             {/* Bottom row: Video Control Panel */}
             {canControlVideo && (
@@ -1020,7 +1039,9 @@ export default function RoomPage({
                 onPlayHighlight={handlePlayHighlight}
                 onEditHighlight={openHighlightEditModal}
                 onDeleteHighlight={handleDeleteHighlight}
-                onRecordHighlight={() => setShowHighlightRecorderModal(true)}
+                onRecordHighlight={openHighlightRecorder}
+                onRefreshHighlights={() => void handleRefreshHighlights()}
+                isRefreshingHighlights={isRefreshingHighlights}
                 deletingHighlightId={deletingHighlightId}
                 formatMemberDisplayName={(member) =>
                   member.nickname?.trim() ||
@@ -1113,6 +1134,11 @@ export default function RoomPage({
           )}
         </aside>
       </main>
+
+      <HighlightPlayerModal
+        playingHighlight={playingHighlight}
+        onClose={closePlayModal}
+      />
 
       <Modal
         isOpen={showInviteModal}
@@ -1320,12 +1346,11 @@ export default function RoomPage({
 
       <HighlightRecorderModal
         isOpen={showHighlightRecorderModal}
-        onClose={() => setShowHighlightRecorderModal(false)}
+        onClose={closeHighlightRecorder}
         onSave={handleCreateHighlight}
         isLoading={isCreatingHighlight}
         isSaved={isHighlightSaved}
-        previewStartMs={highlightPreviewStartMs}
-        previewEndMs={lastKnownPositionMs}
+        previewEndMs={highlightPreviewEndMs}
       />
     </div>
   );

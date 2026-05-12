@@ -97,9 +97,8 @@ export default function MyHighlightsPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editNote, setEditNote] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [playingHighlight, setPlayingHighlight] = useState<PlayingHighlight | null>(
-    null,
-  );
+  const [playingHighlight, setPlayingHighlight] =
+    useState<PlayingHighlight | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [playerReady, setPlayerReady] = useState(false);
@@ -113,7 +112,6 @@ export default function MyHighlightsPage() {
 
       if (!res.ok) {
         console.error("Failed to fetch highlights");
-        alert("Unable to load your highlights right now.");
         return;
       }
 
@@ -121,7 +119,6 @@ export default function MyHighlightsPage() {
       setHighlights(data.highlights);
     } catch (error) {
       console.error(error);
-      alert("Unable to load your highlights right now.");
     } finally {
       setIsLoading(false);
     }
@@ -249,7 +246,8 @@ export default function MyHighlightsPage() {
         const rel = Math.max(0, abs - startS);
 
         // Ensure video is playing if it should be
-        if (isPlaying && player.getPlayerState?.() === 2) { // 2 is PAUSED in YT API
+        if (isPlaying && player.getPlayerState?.() === 2) {
+          // 2 is PAUSED in YT API
           player.playVideo?.();
         }
 
@@ -310,7 +308,10 @@ export default function MyHighlightsPage() {
     if (!player || !playerReady || !highlight) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const ratio = Math.min(
+      1,
+      Math.max(0, (event.clientX - rect.left) / rect.width),
+    );
 
     const clipDurationS = (highlight.endMs - highlight.startMs) / 1000;
     const startS = highlight.startMs / 1000;
@@ -331,7 +332,8 @@ export default function MyHighlightsPage() {
   const stats = useMemo(() => {
     const total = highlights.length;
     const totalDurationMs = highlights.reduce(
-      (sum, highlight) => sum + Math.max(0, highlight.endMs - highlight.startMs),
+      (sum, highlight) =>
+        sum + Math.max(0, highlight.endMs - highlight.startMs),
       0,
     );
     const latest = [...highlights].sort(
@@ -483,7 +485,8 @@ export default function MyHighlightsPage() {
                 My Highlights
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Watch your saved clips, edit titles and notes, or explore amazing moments from your watch parties.
+                Watch your saved clips, edit titles and notes, or explore
+                amazing moments from your watch parties.
               </p>
             </div>
 
@@ -753,10 +756,7 @@ export default function MyHighlightsPage() {
                     title={isPlaying ? "Pause" : "Play"}
                   >
                     {isPlaying ? (
-                      <svg
-                        className="w-5 h-5 fill-current"
-                        viewBox="0 0 24 24"
-                      >
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                         <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
                       </svg>
                     ) : (
