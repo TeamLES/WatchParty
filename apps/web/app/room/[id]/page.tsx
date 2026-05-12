@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   BookmarkPlusIcon,
   CopyIcon,
-  Edit3Icon,
   MessageSquareTextIcon,
   MonitorPlayIcon,
   PlayIcon,
@@ -37,6 +36,8 @@ import {
   SyncedYouTubePlayer,
   type SyncedYouTubePlayerRef,
 } from "@/components/app/synced-youtube-player";
+import { HighlightRecorderModal } from "@/components/app/highlight-recorder-modal";
+import { HighlightsSection } from "@/components/app/highlights-section";
 import { extractYoutubeId } from "@/lib/youtube";
 
 // Hardcoded mock messages
@@ -116,6 +117,8 @@ export default function RoomPage({
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
   const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
+  const [showHighlightRecorderModal, setShowHighlightRecorderModal] =
+    useState(false);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [isHighlightSaved, setIsHighlightSaved] = useState(false);
   const [highlightBackSeconds, setHighlightBackSeconds] = useState(30);
@@ -154,7 +157,8 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to fetch highlights");
+        console.error("Failed to fetch highlights");
+        return;
       }
 
       const data = (await res.json()) as GetHighlightsResponse;
@@ -340,7 +344,8 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Nepodarilo sa updatnúť videoUrl");
+        console.error("Nepodarilo sa updatnúť videoUrl");
+        return;
       }
 
       // Aktulizacia prebehla uspesne
@@ -463,7 +468,8 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Nepodarilo sa zmazať roomku.");
+        console.error("Nepodarilo sa zmazať roomku.");
+        return;
       }
 
       router.push("/hub");
@@ -479,7 +485,10 @@ export default function RoomPage({
     socketPlayerRef.current?.sendReaction(emoji);
   };
 
-  const handleCreateHighlight = async () => {
+  const handleCreateHighlight = async (config: {
+    backSeconds: number;
+    title?: string;
+  }) => {
     const currentPositionMs =
       socketPlayerRef.current?.getCurrentPositionMs() ?? lastKnownPositionMs;
 
@@ -488,14 +497,15 @@ export default function RoomPage({
     }
 
     setIsCreatingHighlight(true);
-    setIsHighlightSaved(false);
 
     try {
-      const backMs = highlightBackSeconds * 1000;
+      const backMs = config.backSeconds * 1000;
       const payload: CreateHighlightRequest = {
         startMs: Math.max(0, currentPositionMs - backMs),
         endMs: currentPositionMs,
-        title: `Highlight at ${formatDurationMs(currentPositionMs)}`,
+        title:
+          config.title ||
+          `Highlight at ${formatDurationMs(currentPositionMs)}`,
       };
       const res = await fetch(`/api/rooms/${roomId}/highlights`, {
         method: "POST",
@@ -506,13 +516,17 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to create highlight");
+        console.error("Failed to create highlight");
+        return;
       }
 
       const created = (await res.json()) as CreateHighlightResponse;
       setHighlights((prev) => [created.highlight, ...prev]);
       setIsHighlightSaved(true);
-      window.setTimeout(() => setIsHighlightSaved(false), 1800);
+      window.setTimeout(() => {
+        setIsHighlightSaved(false);
+        setShowHighlightRecorderModal(false);
+      }, 2500);
       void fetchHighlights();
     } catch (error) {
       console.error(error);
@@ -564,7 +578,8 @@ export default function RoomPage({
       );
 
       if (!res.ok) {
-        throw new Error("Failed to update highlight");
+        console.error("Failed to update highlight");
+        return;
       }
 
       const data = (await res.json()) as UpdateHighlightResponse;
@@ -630,7 +645,8 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to delete highlight");
+        console.error("Failed to delete highlight");
+        return;
       }
 
       setHighlights((prev) =>
@@ -659,7 +675,10 @@ export default function RoomPage({
         body: JSON.stringify({ title: editTitle.trim() }),
       });
 
-      if (!res.ok) throw new Error("Failed to update room title");
+      if (!res.ok) {
+        console.error("Failed to update room title");
+        return;
+      }
 
       const updatedRoom = (await res.json()) as GetRoomResponse;
       setRoom(updatedRoom);
@@ -700,7 +719,8 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to kick member");
+        console.error("Failed to kick member");
+        return;
       }
 
       const latestRoom = await fetchRoomSnapshot();
@@ -733,7 +753,7 @@ export default function RoomPage({
   }
 
   // If API does not send isHost yet, keep controls available instead of hiding the input.
-  const canControlVideo = typeof room.isHost === "boolean" ? room.isHost : true;
+  const canControlVideo = room.isHost;
   const watchingCount = liveOnlineCount ?? room.onlineCount ?? 0;
   const highlightPreviewStartMs = Math.max(
     0,
@@ -820,48 +840,7 @@ export default function RoomPage({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-border/50 pt-4 dark:border-white/5 sm:flex-row sm:items-center sm:justify-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={highlightBackSeconds}
-                  onChange={(event) =>
-                    setHighlightBackSeconds(Number(event.target.value))
-                  }
-                  className="h-10 rounded-xl border border-border/70 bg-background/75 px-3 text-sm font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/30 dark:border-white/10 dark:bg-black/20"
-                  aria-label="Highlight length"
-                >
-                  {HIGHLIGHT_BACK_SECONDS_OPTIONS.map((seconds) => (
-                    <option key={seconds} value={seconds}>
-                      {seconds}s
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Will save {formatDurationMs(highlightPreviewStartMs)} -{" "}
-                  {formatDurationMs(lastKnownPositionMs)}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-10 rounded-xl border border-primary/20 bg-primary/10 font-semibold text-primary hover:bg-primary/20"
-                onClick={() => void handleCreateHighlight()}
-                disabled={
-                  !activeVideoId ||
-                  lastKnownPositionMs <= 0 ||
-                  isCreatingHighlight
-                }
-              >
-                <BookmarkPlusIcon className="size-4" />
-                <span>
-                  {isCreatingHighlight
-                    ? "Saving..."
-                    : isHighlightSaved
-                      ? "Saved"
-                      : `Save last ${highlightBackSeconds}s`}
-                </span>
-              </Button>
-            </div>
+
 
             {/* Bottom row: Video Control Panel */}
             {canControlVideo && (
@@ -1029,198 +1008,107 @@ export default function RoomPage({
         </section>
 
         {/* Live Chat Column */}
-        <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 h-125 lg:h-auto pb-2">
+        <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 max-h-[calc(100vh-8rem)] pb-2">
           {!isFullscreen && (
             <>
-              <div className="glass-card panel-surface flex max-h-72 shrink-0 flex-col overflow-hidden rounded-3xl shadow-lg">
-                <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
-                  <div className="flex items-center gap-2">
-                    <BookmarkPlusIcon className="size-5 text-primary" />
-                    <h2 className="text-lg font-semibold">Highlights</h2>
-                  </div>
-                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    {highlights.length}
-                  </span>
-                </div>
-
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10">
-                  {isLoadingHighlights ? (
-                    <p className="text-sm text-muted-foreground">
-                      Loading highlights...
-                    </p>
-                  ) : highlights.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No highlights saved yet.
-                    </p>
-                  ) : (
-                    highlights.map((highlight) => {
-                      const creator = room.members.find(
-                        (member) => member.userId === highlight.createdByUserId,
-                      );
-                      const creatorLabel = creator
-                        ? formatMemberDisplayName(creator)
-                        : `User ${highlight.createdByUserId.slice(0, 8)}`;
-                      const canDeleteHighlight =
-                        currentUserId === highlight.createdByUserId ||
-                        room.isHost;
-                      const canEditHighlight =
-                        currentUserId === highlight.createdByUserId;
-
-                      return (
-                        <div
-                          key={highlight.highlightId}
-                          className="rounded-2xl border border-border/60 bg-card/80 p-3 dark:border-white/10 dark:bg-white/10"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold">
-                                {highlight.title ?? "Untitled highlight"}
-                              </p>
-                              <p className="mt-1 font-mono text-xs text-muted-foreground">
-                                {formatDurationMs(highlight.startMs)} -{" "}
-                                {formatDurationMs(highlight.endMs)}
-                              </p>
-                              <p className="mt-1 truncate text-xs text-muted-foreground">
-                                by {creatorLabel}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
-                                onClick={() => handlePlayHighlight(highlight)}
-                                title="Play highlight"
-                              >
-                                <PlayIcon className="size-4 fill-current" />
-                              </Button>
-                              {canEditHighlight && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-white/10"
-                                  onClick={() =>
-                                    openHighlightEditModal(highlight)
-                                  }
-                                  title="Edit highlight"
-                                >
-                                  <Edit3Icon className="size-4" />
-                                </Button>
-                              )}
-                              {canDeleteHighlight && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-500"
-                                  onClick={() =>
-                                    void handleDeleteHighlight(
-                                      highlight.highlightId,
-                                    )
-                                  }
-                                  disabled={
-                                    deletingHighlightId ===
-                                    highlight.highlightId
-                                  }
-                                  title="Delete highlight"
-                                >
-                                  <TrashIcon className="size-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+              <HighlightsSection
+                highlights={highlights}
+                isLoading={isLoadingHighlights}
+                currentUserId={currentUserId}
+                isHostUser={room.isHost}
+                roomMembers={room.members}
+                onPlayHighlight={handlePlayHighlight}
+                onEditHighlight={openHighlightEditModal}
+                onDeleteHighlight={handleDeleteHighlight}
+                onRecordHighlight={() => setShowHighlightRecorderModal(true)}
+                deletingHighlightId={deletingHighlightId}
+                formatMemberDisplayName={(member) =>
+                  member.nickname?.trim() ||
+                  (member.userId.startsWith("guest-")
+                    ? `Guest ${member.userId.slice(-4)}`
+                    : `User ${member.userId.slice(0, 8)}`)
+                }
+              />
 
               <div className="glass-card panel-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl shadow-lg">
-              {/* Chat Header */}
-              <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
-                <div className="flex items-center gap-2">
-                  <MessageSquareTextIcon className="size-5 text-primary" />
-                  <h2 className="font-semibold text-lg">Room Chat</h2>
-                </div>
-                <div className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  Live
-                </div>
-              </div>
-
-              {/* Messages Scroll Area */}
-              <div
-                ref={chatContainerRef}
-                className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
-              >
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
-                  >
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {msg.user}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60">
-                        {msg.time}
-                      </span>
-                    </div>
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
-                    >
-                      {msg.text}
-                    </div>
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
+                  <div className="flex items-center gap-2">
+                    <MessageSquareTextIcon className="size-5 text-primary" />
+                    <h2 className="font-semibold text-lg">Room Chat</h2>
                   </div>
-                ))}
-              </div>
+                  <div className="flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                    </span>
+                    Live
+                  </div>
+                </div>
 
-              {/* Quick Reactions Center */}
-              <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
-                {EMOJI_LIST.map((emoji) => (
-                  <Button
-                    key={emoji}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleReaction(emoji)}
-                    className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
-                  >
-                    {emoji}
-                  </Button>
-                ))}
-              </div>
-
-              {/* Chat Input */}
-              <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
-                <form
-                  onSubmit={handleSendMessage}
-                  className="relative flex items-center"
+                <div
+                  ref={chatContainerRef}
+                  className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
                 >
-                  <Input
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a message..."
-                    className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
-                  />
-                  <Button
-                    type="submit"
-                    size="icon"
-                    variant="ghost"
-                    className="absolute right-1 h-10 w-10 rounded-lg text-primary hover:bg-primary/20 hover:text-primary transition-colors"
-                    disabled={!newMessage.trim()}
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                    >
+                      <div className="mb-1 flex items-baseline gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {msg.user}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {msg.time}
+                        </span>
+                      </div>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
+                  {EMOJI_LIST.map((emoji) => (
+                    <Button
+                      key={emoji}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleReaction(emoji)}
+                      className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
+                    >
+                      {emoji}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
+                  <form
+                    onSubmit={handleSendMessage}
+                    className="relative flex items-center"
                   >
-                    <SendIcon className="size-4" />
-                  </Button>
-                </form>
+                    <Input
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Type a message..."
+                      className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      variant="ghost"
+                      className="absolute right-1 h-10 w-10 rounded-lg text-primary transition-colors hover:bg-primary/20 hover:text-primary"
+                      disabled={!newMessage.trim()}
+                    >
+                      <SendIcon className="size-4" />
+                    </Button>
+                  </form>
+                </div>
               </div>
-            </div>
             </>
           )}
         </aside>
@@ -1429,6 +1317,16 @@ export default function RoomPage({
           </div>
         </form>
       </Modal>
+
+      <HighlightRecorderModal
+        isOpen={showHighlightRecorderModal}
+        onClose={() => setShowHighlightRecorderModal(false)}
+        onSave={handleCreateHighlight}
+        isLoading={isCreatingHighlight}
+        isSaved={isHighlightSaved}
+        previewStartMs={highlightPreviewStartMs}
+        previewEndMs={lastKnownPositionMs}
+      />
     </div>
   );
 }
