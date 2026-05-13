@@ -79,9 +79,7 @@ export class InMemoryHighlightsRepository implements HighlightsRepository {
 
     const updated: Highlight = {
       ...existing,
-      ...(input.shouldUpdateTitle && input.title
-        ? { title: input.title }
-        : {}),
+      ...(input.shouldUpdateTitle && input.title ? { title: input.title } : {}),
       ...(input.shouldUpdateNote && input.note ? { note: input.note } : {}),
       updatedAt: input.updatedAt,
     };

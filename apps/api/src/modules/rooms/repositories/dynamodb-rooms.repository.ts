@@ -7,6 +7,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   Injectable,
@@ -33,6 +34,9 @@ import {
 } from '../mappers/rooms-dynamodb.mapper';
 import {
   RoomAlreadyExistsError,
+  RoomCapacityExceededError,
+  RoomMemberAlreadyExistsError,
+  RoomMutationTargetMissingError,
   type RoomsRepository,
 } from './rooms.repository';
 
@@ -226,6 +230,7 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
           Key: {
             roomId,
           },
+          ConsistentRead: true,
         }),
       );
     } catch (error) {
@@ -239,34 +244,76 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     return room;
   }
 
-  async addMember(member: RoomMember): Promise<RoomMember> {
+  async joinMember(member: RoomMember): Promise<RoomMember> {
     this.logger.log(
-      `addMember roomId=${member.roomId} userId=${member.userId}`,
+      `joinMember roomId=${member.roomId} userId=${member.userId}`,
     );
-    const item = toRoomMemberItem(member);
 
     try {
       await this.documentClient.send(
-        new PutCommand({
-          TableName: this.tables.roomMembers,
-          Item: item,
-          ConditionExpression:
-            'attribute_not_exists(roomId) AND attribute_not_exists(userId)',
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.tables.rooms,
+                Key: {
+                  roomId: member.roomId,
+                },
+                UpdateExpression:
+                  'SET activeWatcherCount = activeWatcherCount + :one',
+                ConditionExpression:
+                  'attribute_exists(roomId) AND #status = :active AND (attribute_not_exists(maxCapacity) OR attribute_type(maxCapacity, :nullType) OR activeWatcherCount < maxCapacity)',
+                ExpressionAttributeNames: {
+                  '#status': 'status',
+                },
+                ExpressionAttributeValues: {
+                  ':active': 'active',
+                  ':nullType': 'NULL',
+                  ':one': 1,
+                },
+              },
+            },
+            {
+              Put: {
+                TableName: this.tables.roomMembers,
+                Item: toRoomMemberItem(member),
+                ConditionExpression:
+                  'attribute_not_exists(roomId) AND attribute_not_exists(userId)',
+              },
+            },
+          ],
         }),
       );
 
       return member;
     } catch (error) {
-      if (!isConditionalCheckFailed(error)) {
-        throw this.toInfrastructureException('addMember', error, 'roomMembers');
+      if (!isTransactionCanceled(error)) {
+        throw this.toInfrastructureException(
+          'joinMember',
+          error,
+          'roomMembers',
+        );
       }
 
       const existingMember = await this.getMember(member.roomId, member.userId);
-      if (!existingMember) {
-        throw this.toInfrastructureException('addMember', error, 'roomMembers');
+      if (existingMember) {
+        throw new RoomMemberAlreadyExistsError(member.roomId, member.userId);
       }
 
-      return existingMember;
+      const room = await this.getRoomById(member.roomId);
+      if (!room) {
+        throw new RoomMutationTargetMissingError(member.roomId);
+      }
+
+      if (
+        room.maxCapacity !== undefined &&
+        room.maxCapacity !== null &&
+        room.activeWatcherCount >= room.maxCapacity
+      ) {
+        throw new RoomCapacityExceededError(member.roomId);
+      }
+
+      throw this.toInfrastructureException('joinMember', error, 'roomMembers');
     }
   }
 
@@ -281,6 +328,7 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
             roomId,
             userId,
           },
+          ConsistentRead: true,
         }),
       );
     } catch (error) {
@@ -295,15 +343,46 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
 
     try {
       await this.documentClient.send(
-        new DeleteCommand({
-          TableName: this.tables.roomMembers,
-          Key: {
-            roomId,
-            userId,
-          },
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Delete: {
+                TableName: this.tables.roomMembers,
+                Key: {
+                  roomId,
+                  userId,
+                },
+                ConditionExpression:
+                  'attribute_exists(roomId) AND attribute_exists(userId)',
+              },
+            },
+            {
+              Update: {
+                TableName: this.tables.rooms,
+                Key: {
+                  roomId,
+                },
+                UpdateExpression:
+                  'SET activeWatcherCount = activeWatcherCount - :one',
+                ConditionExpression:
+                  'attribute_exists(roomId) AND activeWatcherCount > :zero',
+                ExpressionAttributeValues: {
+                  ':one': 1,
+                  ':zero': 0,
+                },
+              },
+            },
+          ],
         }),
       );
     } catch (error) {
+      if (isTransactionCanceled(error)) {
+        const existingMember = await this.getMember(roomId, userId);
+        if (!existingMember) {
+          return;
+        }
+      }
+
       throw this.toInfrastructureException(
         'removeMember',
         error,
@@ -350,31 +429,6 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
 
     return members.sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
-  }
-
-  async countMembers(roomId: string): Promise<number> {
-    let response;
-
-    try {
-      response = await this.documentClient.send(
-        new QueryCommand({
-          TableName: this.tables.roomMembers,
-          KeyConditionExpression: 'roomId = :roomId',
-          ExpressionAttributeValues: {
-            ':roomId': roomId,
-          },
-          Select: 'COUNT',
-        }),
-      );
-    } catch (error) {
-      throw this.toInfrastructureException(
-        'countMembers',
-        error,
-        'roomMembers',
-      );
-    }
-
-    return response.Count ?? 0;
   }
 
   async createInvite(invite: RoomInvite): Promise<RoomInvite> {
@@ -587,6 +641,10 @@ function isConditionalCheckFailed(error: unknown): boolean {
     'name' in error &&
     (error as { name: string }).name === 'ConditionalCheckFailedException'
   );
+}
+
+function isTransactionCanceled(error: unknown): boolean {
+  return getErrorName(error) === 'TransactionCanceledException';
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

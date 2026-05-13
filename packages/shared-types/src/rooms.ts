@@ -16,7 +16,8 @@ export interface RoomSummaryResponse {
   isPrivate: boolean;
   password: string | null;
   hostUserId: string;
-  memberCount: number;
+  maxCapacity: number | null;
+  activeWatcherCount: number;
   onlineCount?: number | null;
   status: RoomStatus;
   createdAt: string;
@@ -50,6 +51,6 @@ export interface CreateRoomInviteResponse {
 
 export interface GetRoomMembersResponse {
   roomId: string;
-  memberCount: number;
+  activeWatcherCount: number;
   members: RoomMemberResponse[];
 }

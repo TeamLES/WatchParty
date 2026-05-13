@@ -9,8 +9,9 @@ export function extractYoutubeVideoId(videoUrl: string): string | null {
   }
 
   // Use the same regex as frontend for consistency, handling URLs with or without http://
-  const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const regExp =
+    /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
   const match = videoUrl.match(regExp);
-  
+
   return match && match[2].length === 11 ? match[2] : null;
 }

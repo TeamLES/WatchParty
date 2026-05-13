@@ -14,6 +14,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -75,11 +76,7 @@ export class RoomsController {
     @CurrentUser() user: VerifiedCognitoAccessToken | null,
   ): Promise<CreateRoomResponse> {
     const userId = this.getRequiredUserSub(user);
-    return this.roomsService.createRoom(
-      userId,
-      createRoomDto,
-      this.getUserDisplayName(user),
-    );
+    return this.roomsService.createRoom(userId, createRoomDto);
   }
 
   @Patch(':roomId')
@@ -138,6 +135,7 @@ export class RoomsController {
   @ApiBody({ type: JoinRoomDto, required: false })
   @ApiOkResponse({ description: 'Joined room or already member' })
   @ApiBadRequestResponse({ description: 'Invalid roomId' })
+  @ApiConflictResponse({ description: 'Room is already full' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
   @ApiNotFoundResponse({ description: 'Room not found' })
   async joinRoom(
@@ -161,7 +159,6 @@ export class RoomsController {
   @ApiOkResponse({ description: 'Left room successfully' })
   @ApiBadRequestResponse({ description: 'Invalid roomId' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
-  @ApiForbiddenResponse({ description: 'Host cannot leave the room' })
   @ApiNotFoundResponse({ description: 'Room not found' })
   async leaveRoom(
     @Param() params: RoomIdParamDto,

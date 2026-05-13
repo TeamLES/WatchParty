@@ -11,6 +11,8 @@ export interface Room {
   password?: string;
   visibilityStatus?: RoomVisibilityStatus;
   hostUserId: string;
+  maxCapacity?: number | null;
+  activeWatcherCount: number;
   status: RoomStatus;
   createdAt: string;
   updatedAt?: string;

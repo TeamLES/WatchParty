@@ -51,6 +51,8 @@ export interface SyncedYouTubePlayerProps {
   roomId: string;
   videoId: string | null;
   isHost: boolean;
+  startPlaybackSignal?: number;
+  onRemoteVideoId?: (videoId: string) => void;
   onOnlineCountChange?: (onlineCount: number | null) => void;
   onChatEvent?: (event: ChatMessageEvent | ReactionEvent) => void;
   onFullscreenChange?: (isFullscreen: boolean) => void;
@@ -196,6 +198,8 @@ export const SyncedYouTubePlayer = forwardRef<
     roomId,
     videoId,
     isHost,
+    startPlaybackSignal = 0,
+    onRemoteVideoId,
     onOnlineCountChange,
     onChatEvent,
     onFullscreenChange,
@@ -222,6 +226,7 @@ export const SyncedYouTubePlayer = forwardRef<
   const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
   const onOnlineCountChangeRef = useRef(onOnlineCountChange);
   const onChatEventRef = useRef(onChatEvent);
+  const onRemoteVideoIdRef = useRef(onRemoteVideoId);
 
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
@@ -280,6 +285,10 @@ export const SyncedYouTubePlayer = forwardRef<
   }, [onChatEvent]);
 
   useEffect(() => {
+    onRemoteVideoIdRef.current = onRemoteVideoId;
+  }, [onRemoteVideoId]);
+
+  useEffect(() => {
     const handleFullscreenChange = () => {
       const isFs = Boolean(document.fullscreenElement);
       setIsFullscreen(isFs);
@@ -292,10 +301,6 @@ export const SyncedYouTubePlayer = forwardRef<
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [onFullscreenChange]);
-
-  useEffect(() => {
-    playerReadyRef.current = playerReady;
-  }, [playerReady]);
 
   const readPositionMs = useCallback(() => {
     const player = playerRef.current;
@@ -446,6 +451,23 @@ export const SyncedYouTubePlayer = forwardRef<
     [clearLocalSegmentTimer, finishLocalSegmentPlayback, readPositionMs],
   );
 
+  const playForEveryone = useCallback(() => {
+    const player = playerRef.current;
+
+    if (!playerReadyRef.current || !player || !isHostRef.current) {
+      return false;
+    }
+
+    try {
+      player.playVideo();
+      setPlaybackState("playing");
+      playbackStateRef.current = "playing";
+      return sendPlaybackEventRef.current?.("play", "playing") ?? false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   useImperativeHandle(ref, () => ({
     getCurrentPositionMs: () => readPositionMs(),
     playLocalSegment,
@@ -486,6 +508,7 @@ export const SyncedYouTubePlayer = forwardRef<
       return sendSocketMessage({
         action: "syncPlayback",
         roomId,
+        ...(videoId ? { videoId } : {}),
         sequence: nextSequence,
         eventType,
         state,
@@ -494,7 +517,7 @@ export const SyncedYouTubePlayer = forwardRef<
         sentAt: new Date().toISOString(),
       });
     },
-    [readPositionMs, roomId, sendSocketMessage],
+    [readPositionMs, roomId, sendSocketMessage, videoId],
   );
 
   useEffect(() => {
@@ -589,12 +612,29 @@ export const SyncedYouTubePlayer = forwardRef<
           message.type === "playback.sync") &&
         message.roomId === roomId
       ) {
+        if (
+          message.videoId &&
+          message.videoId !== videoId &&
+          (!isHostRef.current || !videoId)
+        ) {
+          onRemoteVideoIdRef.current?.(message.videoId);
+          return;
+        }
+
         sequenceRef.current = Math.max(sequenceRef.current, message.sequence);
         applyRemotePlayback(message);
       }
     },
-    [applyRemotePlayback, roomId],
+    [applyRemotePlayback, roomId, videoId],
   );
+
+  useEffect(() => {
+    if (!startPlaybackSignal || !isHost || !playerReady) {
+      return;
+    }
+
+    playForEveryone();
+  }, [isHost, playForEveryone, playerReady, startPlaybackSignal]);
 
   useEffect(() => {
     let didUnmount = false;
@@ -691,6 +731,7 @@ export const SyncedYouTubePlayer = forwardRef<
     if (!mount || !videoId) {
       playerRef.current?.destroy();
       playerRef.current = null;
+      playerReadyRef.current = false;
       setPlayerReady(false);
       setPlaybackState("paused");
       setPositionMs(0);
@@ -699,6 +740,7 @@ export const SyncedYouTubePlayer = forwardRef<
     }
 
     let isCancelled = false;
+    playerReadyRef.current = false;
     setPlayerReady(false);
     mount.innerHTML = "";
 
@@ -730,6 +772,7 @@ export const SyncedYouTubePlayer = forwardRef<
                 return;
               }
 
+              playerReadyRef.current = true;
               setPlayerReady(true);
               applySavedVolumeToPlayer();
               refreshPlayerClock();
@@ -788,6 +831,7 @@ export const SyncedYouTubePlayer = forwardRef<
       })
       .catch((error) => {
         console.error(error);
+        playerReadyRef.current = false;
         setPlayerReady(false);
       });
 
@@ -797,6 +841,7 @@ export const SyncedYouTubePlayer = forwardRef<
       playerRef.current?.destroy();
       playerRef.current = null;
       mount.innerHTML = "";
+      playerReadyRef.current = false;
       setPlayerReady(false);
     };
   }, [

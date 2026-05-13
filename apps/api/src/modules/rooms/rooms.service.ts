@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -29,6 +30,9 @@ import type { RoomMember } from './entities/room-member.entity';
 import type { Room } from './entities/room.entity';
 import {
   RoomAlreadyExistsError,
+  RoomCapacityExceededError,
+  RoomMemberAlreadyExistsError,
+  RoomMutationTargetMissingError,
   type RoomsRepository,
 } from './repositories/rooms.repository';
 
@@ -49,7 +53,6 @@ export class RoomsService {
   async createRoom(
     userId: string,
     createRoomDto: CreateRoomDto,
-    nickname?: string,
   ): Promise<CreateRoomResponse> {
     this.logger.log(`createRoom userId=${userId}`);
     const maxAttempts = 3;
@@ -78,28 +81,23 @@ export class RoomsService {
         ...(password ? { password } : {}),
         visibilityStatus: isPrivate ? 'private' : 'public',
         hostUserId: userId,
+        ...(createRoomDto.maxCapacity !== undefined
+          ? { maxCapacity: createRoomDto.maxCapacity }
+          : {}),
+        activeWatcherCount: 0,
         status: 'active',
         createdAt,
         updatedAt: createdAt,
       };
 
-      const hostMember: RoomMember = {
-        roomId: room.roomId,
-        userId,
-        role: 'host',
-        joinedAt: createdAt,
-        ...(nickname ? { nickname } : {}),
-      };
-
       try {
         await this.roomsRepository.createRoom(room);
-        await this.roomsRepository.addMember(hostMember);
 
         this.logger.log(
           `createRoom success roomId=${room.roomId} host=${userId}`,
         );
 
-        return this.toRoomSummaryResponse(room, 1, null);
+        return this.toRoomSummaryResponse(room, null);
       } catch (error) {
         if (error instanceof RoomAlreadyExistsError && attempt < maxAttempts) {
           this.logger.warn(
@@ -183,12 +181,10 @@ export class RoomsService {
 
     const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
-        const [memberCount, onlineCount] = await Promise.all([
-          this.roomsRepository.countMembers(room.roomId),
-          this.realtimePresenceService.countOnlineByRoom(room.roomId),
-        ]);
+        const onlineCount =
+          await this.realtimePresenceService.countOnlineByRoom(room.roomId);
 
-        return this.toRoomSummaryResponse(room, memberCount, onlineCount);
+        return this.toRoomSummaryResponse(room, onlineCount);
       }),
     );
 
@@ -202,12 +198,11 @@ export class RoomsService {
       this.roomsRepository.getMembersByRoomId(roomId),
       this.realtimePresenceService.countOnlineByRoom(roomId),
     ]);
-    const memberCount = members.length;
     const isHost = room.hostUserId === userId;
     const isMember = members.some((member) => member.userId === userId);
 
     return {
-      ...this.toRoomSummaryResponse(room, memberCount, onlineCount),
+      ...this.toRoomSummaryResponse(room, onlineCount),
       members: members.map((member) => this.toRoomMemberResponse(member)),
       isHost,
       isMember,
@@ -238,7 +233,9 @@ export class RoomsService {
       };
     }
 
-    if (room.isPrivate) {
+    const isHostJoiningOwnRoom = room.hostUserId === userId;
+
+    if (room.isPrivate && !isHostJoiningOwnRoom) {
       const providedPassword = joinRoomDto?.password?.trim() ?? '';
       const storedPassword = room.password ?? '';
 
@@ -250,12 +247,46 @@ export class RoomsService {
     const member: RoomMember = {
       roomId,
       userId,
-      role: room.hostUserId === userId ? 'host' : 'viewer',
+      role: isHostJoiningOwnRoom ? 'host' : 'viewer',
       joinedAt: this.nowIsoString(),
       ...(nickname ? { nickname } : {}),
     };
 
-    const addedMember = await this.roomsRepository.addMember(member);
+    let addedMember: RoomMember;
+
+    try {
+      addedMember = await this.roomsRepository.joinMember(member);
+    } catch (error) {
+      if (error instanceof RoomMemberAlreadyExistsError) {
+        const concurrentExistingMember = await this.roomsRepository.getMember(
+          roomId,
+          userId,
+        );
+
+        if (concurrentExistingMember) {
+          return {
+            roomId,
+            userId: concurrentExistingMember.userId,
+            role: concurrentExistingMember.role,
+            joinedAt: concurrentExistingMember.joinedAt,
+            alreadyMember: true,
+          };
+        }
+      }
+
+      if (error instanceof RoomCapacityExceededError) {
+        throw new ConflictException({
+          code: 'ROOM_CAPACITY_EXCEEDED',
+          message: 'Room is full.',
+        });
+      }
+
+      if (error instanceof RoomMutationTargetMissingError) {
+        throw new NotFoundException('Room not found');
+      }
+
+      throw error;
+    }
 
     this.logger.log(`joinRoom success roomId=${roomId} userId=${userId}`);
 
@@ -270,13 +301,7 @@ export class RoomsService {
 
   async leaveRoom(roomId: string, userId: string): Promise<void> {
     this.logger.log(`leaveRoom roomId=${roomId} userId=${userId}`);
-    const room = await this.getRoomOrThrow(roomId);
-
-    if (room.hostUserId === userId) {
-      throw new ForbiddenException(
-        'Host cannot leave the room, must delete it instead',
-      );
-    }
+    await this.getRoomOrThrow(roomId);
 
     const member = await this.roomsRepository.getMember(roomId, userId);
     if (!member) {
@@ -352,12 +377,12 @@ export class RoomsService {
   }
 
   async getRoomMembers(roomId: string): Promise<GetRoomMembersResponse> {
-    await this.getRoomOrThrow(roomId);
+    const room = await this.getRoomOrThrow(roomId);
     const members = await this.roomsRepository.getMembersByRoomId(roomId);
 
     return {
       roomId,
-      memberCount: members.length,
+      activeWatcherCount: room.activeWatcherCount,
       members: members.map((member) => this.toRoomMemberResponse(member)),
     };
   }
@@ -401,7 +426,6 @@ export class RoomsService {
 
   private toRoomSummaryResponse(
     room: Room,
-    memberCount: number,
     onlineCount: number | null,
   ): RoomSummaryResponse {
     return {
@@ -411,7 +435,8 @@ export class RoomsService {
       isPrivate: room.isPrivate,
       password: room.password ?? null,
       hostUserId: room.hostUserId,
-      memberCount,
+      maxCapacity: room.maxCapacity ?? null,
+      activeWatcherCount: room.activeWatcherCount,
       onlineCount,
       status: room.status,
       createdAt: room.createdAt,

@@ -19,8 +19,21 @@ import { extractYoutubeId } from "@/lib/youtube";
 
 type RoomActivityFilter = "all" | "active" | "empty";
 
-const getWatchingCount = (room: RoomSummaryResponse) =>
-  room.onlineCount ?? 0;
+const getWatchingCount = (room: RoomSummaryResponse) => room.activeWatcherCount;
+
+const formatWatchingLabel = (room: RoomSummaryResponse) => {
+  if (room.maxCapacity !== null) {
+    return `${room.activeWatcherCount} / ${room.maxCapacity} watching`;
+  }
+
+  if (room.activeWatcherCount === 0) {
+    return "No one watching";
+  }
+
+  return room.activeWatcherCount === 1
+    ? "1 watching"
+    : `${room.activeWatcherCount} watching`;
+};
 
 export default function HubPage() {
   const router = useRouter();
@@ -74,6 +87,7 @@ export default function HubPage() {
   const [title, setTitle] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [password, setPassword] = useState("");
+  const [maxCapacity, setMaxCapacity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activityFilter, setActivityFilter] =
@@ -106,14 +120,33 @@ export default function HubPage() {
     setIsSubmitting(true);
 
     try {
-      const payload: { title: string; isPrivate: boolean; password?: string } =
-      {
+      const payload: {
+        title: string;
+        isPrivate: boolean;
+        password?: string;
+        maxCapacity?: number;
+      } = {
         title,
         isPrivate,
       };
 
       if (isPrivate && password) {
         payload.password = password;
+      }
+
+      const normalizedCapacity = maxCapacity.trim();
+      if (normalizedCapacity) {
+        const parsedCapacity = Number(normalizedCapacity);
+        if (
+          !Number.isInteger(parsedCapacity) ||
+          parsedCapacity < 2 ||
+          parsedCapacity > 500
+        ) {
+          alert("Room capacity must be an integer between 2 and 500.");
+          return;
+        }
+
+        payload.maxCapacity = parsedCapacity;
       }
 
       const res = await fetch("/api/rooms", {
@@ -130,6 +163,25 @@ export default function HubPage() {
       }
 
       const data = await res.json();
+      const activateHostResponse = await fetch(
+        `/api/rooms/${data.roomId}/join`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      if (!activateHostResponse.ok) {
+        console.error(
+          "Failed to activate host watcher seat",
+          activateHostResponse.status,
+        );
+        router.push(`/room/join/${data.roomId}`);
+        return;
+      }
 
       router.push(`/room/${data.roomId}`);
     } catch (error) {
@@ -174,6 +226,31 @@ export default function HubPage() {
             />
 
             <div className="mx-2 hidden h-8 w-px bg-violet-300/35 dark:bg-white/10 sm:block"></div>
+
+            <div className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-violet-300/35 bg-white/78 px-3 py-2 text-left shadow-sm transition-all focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/20 dark:border-white/10 dark:bg-black/40 sm:w-48">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <UsersRoundIcon className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor="room-capacity"
+                  className="block text-[11px] font-semibold uppercase text-muted-foreground"
+                >
+                  Capacity
+                </label>
+                <Input
+                  id="room-capacity"
+                  type="number"
+                  min={2}
+                  max={500}
+                  step={1}
+                  value={maxCapacity}
+                  onChange={(event) => setMaxCapacity(event.target.value)}
+                  placeholder="Unlimited"
+                  className="h-6 w-full rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-2 w-full sm:w-auto px-2 pb-2 sm:pb-0">
               <button
@@ -271,91 +348,89 @@ export default function HubPage() {
                 const watchingCount = getWatchingCount(room);
 
                 return (
-                <Card
-                  key={room.roomId}
-                  className={`glass-card border-border/60 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl dark:border-white/10`}
-                  onClick={() => router.push(`/room/join/${room.roomId}`)}
-                >
-                  {/* Visual Header */}
-                  <div
-                    className="h-28 relative border-b border-border/50 bg-cover bg-center dark:border-white/5"
-                    style={{
-                      backgroundImage: extractYoutubeId(room.videoUrl)
-                        ? `url(https://img.youtube.com/vi/${extractYoutubeId(room.videoUrl)}/hqdefault.jpg)`
-                        : "none",
-                    }}
+                  <Card
+                    key={room.roomId}
+                    className={`glass-card border-border/60 hover:border-primary/40 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col hover:-translate-y-1 rounded-3xl dark:border-white/10`}
+                    onClick={() => router.push(`/room/join/${room.roomId}`)}
                   >
-                    {/* Backdrop overlay for readability if map has video */}
-                    {extractYoutubeId(room.videoUrl) && (
-                      <div className="absolute inset-0 bg-slate-950/20 transition-all group-hover:bg-slate-950/10 dark:bg-black/20 dark:group-hover:bg-black/10" />
-                    )}
-
-                    {!extractYoutubeId(room.videoUrl) && (
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
-                    )}
-
-                    <div className="absolute top-4 right-4 z-10">
-                      {room.isPrivate ? (
-                        <Badge
-                          variant="outline"
-                          className="gap-1 border-red-500/30 bg-red-500/15 text-red-700 shadow-sm backdrop-blur-md dark:bg-red-950/40 dark:text-red-400"
-                        >
-                          <LockIcon className="size-3" /> Private
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="gap-1 border-emerald-500/30 bg-emerald-500/15 text-emerald-700 shadow-sm backdrop-blur-md dark:bg-emerald-950/40 dark:text-emerald-400"
-                        >
-                          <GlobeIcon className="size-3" /> Public
-                        </Badge>
+                    {/* Visual Header */}
+                    <div
+                      className="h-28 relative border-b border-border/50 bg-cover bg-center dark:border-white/5"
+                      style={{
+                        backgroundImage: extractYoutubeId(room.videoUrl)
+                          ? `url(https://img.youtube.com/vi/${extractYoutubeId(room.videoUrl)}/hqdefault.jpg)`
+                          : "none",
+                      }}
+                    >
+                      {/* Backdrop overlay for readability if map has video */}
+                      {extractYoutubeId(room.videoUrl) && (
+                        <div className="absolute inset-0 bg-slate-950/20 transition-all group-hover:bg-slate-950/10 dark:bg-black/20 dark:group-hover:bg-black/10" />
                       )}
-                    </div>
-                    <div className="absolute -bottom-5 left-5 z-10 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-card shadow-lg text-primary dark:border-white/10">
-                      <MonitorPlayIcon className="size-5" />
-                    </div>
-                  </div>
 
-                  <CardContent className="p-5 flex-1 flex flex-col pt-8">
-                    <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
-                      {room.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
-                      <UsersRoundIcon className="size-4 opacity-70" />{" "}
-                      {watchingCount === 0
-                        ? "No one watching"
-                        : `${watchingCount} watching`}
-                    </div>
+                      {!extractYoutubeId(room.videoUrl) && (
+                        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-background to-background" />
+                      )}
 
-                    <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
-                      <div className="flex -space-x-2">
-                        {/* Decorative avatars */}
-                        {[...Array(Math.min(3, watchingCount))].map(
-                          (_, i) => (
-                            <div
-                              key={i}
-                              className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-muted text-[8px] text-muted-foreground shadow-sm dark:border-black dark:bg-zinc-800 dark:text-zinc-400"
-                            >
-                              👤
-                            </div>
-                          ),
-                        )}
-                        {watchingCount > 3 && (
-                          <div className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-primary/20 text-[9px] font-bold text-primary shadow-sm dark:border-black">
-                            +{watchingCount - 3}
-                          </div>
+                      <div className="absolute top-4 right-4 z-10">
+                        {room.isPrivate ? (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-red-500/30 bg-red-500/15 text-red-700 shadow-sm backdrop-blur-md dark:bg-red-950/40 dark:text-red-400"
+                          >
+                            <LockIcon className="size-3" /> Private
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-emerald-500/30 bg-emerald-500/15 text-emerald-700 shadow-sm backdrop-blur-md dark:bg-emerald-950/40 dark:text-emerald-400"
+                          >
+                            <GlobeIcon className="size-3" /> Public
+                          </Badge>
                         )}
                       </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="glass-card bg-primary/10 hover:bg-primary/20 text-primary font-semibold rounded-xl group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(232,121,249,0.05)]"
-                      >
-                        Join Party
-                      </Button>
+                      <div className="absolute -bottom-5 left-5 z-10 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-card shadow-lg text-primary dark:border-white/10">
+                        <MonitorPlayIcon className="size-5" />
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+
+                    <CardContent className="p-5 flex-1 flex flex-col pt-8">
+                      <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                        {room.title}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
+                        <UsersRoundIcon className="size-4 opacity-70" />{" "}
+                        {formatWatchingLabel(room)}
+                      </div>
+
+                      <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
+                        <div className="flex -space-x-2">
+                          {/* Decorative avatars */}
+                          {[...Array(Math.min(3, watchingCount))].map(
+                            (_, i) => (
+                              <div
+                                key={i}
+                                className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-muted text-[8px] text-muted-foreground shadow-sm dark:border-black dark:bg-zinc-800 dark:text-zinc-400"
+                              >
+                                👤
+                              </div>
+                            ),
+                          )}
+                          {watchingCount > 3 && (
+                            <div className="z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-primary/20 text-[9px] font-bold text-primary shadow-sm dark:border-black">
+                              +{watchingCount - 3}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="glass-card bg-primary/10 hover:bg-primary/20 text-primary font-semibold rounded-xl group-hover:scale-105 transition-transform shadow-[0_0_15px_rgba(232,121,249,0.05)]"
+                        >
+                          Join Party
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
           </div>

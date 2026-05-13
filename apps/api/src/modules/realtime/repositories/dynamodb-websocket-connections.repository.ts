@@ -189,7 +189,7 @@ export class DynamoDbWebsocketConnectionsRepository {
     return error instanceof Error
       ? error
       : new ServiceUnavailableException(
-        `DynamoDB request failed during ${operation}.`,
-      );
+          `DynamoDB request failed during ${operation}.`,
+        );
   }
 }

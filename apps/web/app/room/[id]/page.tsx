@@ -97,6 +97,7 @@ export default function RoomPage({
     "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
   );
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const [startPlaybackSignal, setStartPlaybackSignal] = useState(0);
   const [messages, setMessages] = useState(INITAL_MESSAGES);
   const [newMessage, setNewMessage] = useState("");
   const [flyingEmojis, setFlyingEmojis] = useState<
@@ -111,7 +112,6 @@ export default function RoomPage({
   const [editTitle, setEditTitle] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
-  const [liveOnlineCount, setLiveOnlineCount] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
@@ -202,7 +202,7 @@ export default function RoomPage({
   useEffect(() => {
     async function fetchRoom() {
       try {
-        const [roomData, meResponse] = await Promise.all([
+        const [initialRoomData, meResponse] = await Promise.all([
           fetchRoomSnapshot(),
           fetch("/api/me", { cache: "no-store" }),
         ]);
@@ -212,12 +212,34 @@ export default function RoomPage({
           setCurrentUserId(me.sub);
         }
 
+        let roomData = initialRoomData;
+
         console.log("Room INFO (vrátené z API):", roomData);
         console.log("Video URL tejto roomky:", roomData.videoUrl);
 
         if (!roomData.isMember) {
-          router.replace(`/room/join/${roomId}`);
-          return;
+          if (!roomData.isHost) {
+            router.replace(`/room/join/${roomId}`);
+            return;
+          }
+
+          const activateHostResponse = await fetch(
+            `/api/rooms/${roomId}/join`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            },
+          );
+
+          if (!activateHostResponse.ok) {
+            router.replace(`/room/join/${roomId}`);
+            return;
+          }
+
+          roomData = await fetchRoomSnapshot();
         }
 
         setRoom(roomData);
@@ -264,7 +286,7 @@ export default function RoomPage({
     };
   }, [activeVideoId]);
 
-  // Refresh room members and count periodically while the page is open.
+  // Refresh room watchers and counts periodically while the page is open.
   useEffect(() => {
     if (!hasRoomLoaded) {
       return;
@@ -275,7 +297,33 @@ export default function RoomPage({
         const latestRoom = await fetchRoomSnapshot();
 
         if (!latestRoom.isMember) {
-          router.replace(`/room/join/${roomId}`);
+          if (!latestRoom.isHost) {
+            router.replace(`/room/join/${roomId}`);
+            return;
+          }
+
+          const activateHostResponse = await fetch(
+            `/api/rooms/${roomId}/join`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            },
+          );
+
+          if (!activateHostResponse.ok) {
+            router.replace(`/room/join/${roomId}`);
+            return;
+          }
+
+          const reactivatedRoom = await fetchRoomSnapshot();
+          setRoom(reactivatedRoom);
+          if (reactivatedRoom.videoUrl) {
+            setVideoUrl(reactivatedRoom.videoUrl);
+            setActiveVideoId(extractYoutubeId(reactivatedRoom.videoUrl));
+          }
           return;
         }
 
@@ -299,9 +347,9 @@ export default function RoomPage({
     };
   }, [fetchRoomSnapshot, hasRoomLoaded, roomId, router]);
 
-  const shouldTrackLeave = room?.isHost === false;
+  const shouldTrackLeave = room?.isMember === true;
 
-  // Best-effort leave on tab close/navigation for non-host members.
+  // Best-effort active-seat release on tab close/navigation.
   useEffect(() => {
     if (!shouldTrackLeave) {
       return;
@@ -364,6 +412,7 @@ export default function RoomPage({
 
       // Aktulizacia prebehla uspesne
       setActiveVideoId(id);
+      setStartPlaybackSignal((value) => value + 1);
     } catch (err) {
       console.error(err);
       alert("Chyba pri zmene videa. Skontroluj konzolu.");
@@ -777,7 +826,7 @@ export default function RoomPage({
 
   // If API does not send isHost yet, keep controls available instead of hiding the input.
   const canControlVideo = room.isHost;
-  const watchingCount = liveOnlineCount ?? room.onlineCount ?? 0;
+  const watchingCount = room.activeWatcherCount;
   const highlightPreviewEndMs =
     highlightCapturePositionMs ?? lastKnownPositionMs;
 
@@ -813,7 +862,13 @@ export default function RoomPage({
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      {watchingCount} watching now
+                      {room.maxCapacity === null
+                        ? watchingCount === 0
+                          ? "No one watching"
+                          : watchingCount === 1
+                            ? "1 watching"
+                            : `${watchingCount} watching`
+                        : `${watchingCount} / ${room.maxCapacity} watching`}
                     </p>
                     {!canControlVideo && (
                       <span className="rounded bg-accent/55 px-1.5 text-[11px] text-muted-foreground/90 dark:bg-white/5 dark:text-muted-foreground/80">
@@ -901,7 +956,11 @@ export default function RoomPage({
               roomId={roomId}
               videoId={activeVideoId}
               isHost={canControlVideo}
-              onOnlineCountChange={setLiveOnlineCount}
+              startPlaybackSignal={startPlaybackSignal}
+              onRemoteVideoId={(nextVideoId) => {
+                setActiveVideoId(nextVideoId);
+                setVideoUrl(`https://www.youtube.com/watch?v=${nextVideoId}`);
+              }}
               onChatEvent={handleChatEvent}
               onFullscreenChange={setIsFullscreen}
             >
@@ -1272,7 +1331,11 @@ export default function RoomPage({
 
           <div className="space-y-3">
             <label className="text-sm font-semibold text-muted-foreground">
-              Current Members ({room?.memberCount})
+              Active Watchers (
+              {room?.maxCapacity === null
+                ? room?.activeWatcherCount
+                : `${room?.activeWatcherCount} / ${room?.maxCapacity}`}
+              )
             </label>
             <div className="flex flex-col gap-2 max-h-50 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {(room?.members ?? []).map((member) => {

@@ -8,6 +8,27 @@ export class RoomAlreadyExistsError extends Error {
   }
 }
 
+export class RoomCapacityExceededError extends Error {
+  constructor(public readonly roomId: string) {
+    super(`Room with roomId ${roomId} has reached its capacity`);
+  }
+}
+
+export class RoomMemberAlreadyExistsError extends Error {
+  constructor(
+    public readonly roomId: string,
+    public readonly userId: string,
+  ) {
+    super(`User ${userId} is already a member of room ${roomId}`);
+  }
+}
+
+export class RoomMutationTargetMissingError extends Error {
+  constructor(public readonly roomId: string) {
+    super(`Room with roomId ${roomId} no longer exists`);
+  }
+}
+
 export interface RoomsRepository {
   createRoom(room: Room): Promise<Room>;
   updateRoom(room: Room): Promise<Room>;
@@ -17,14 +38,12 @@ export interface RoomsRepository {
   // Room lookup must be scoped only by roomId, never by current user.
   getRoomById(roomId: string): Promise<Room | null>;
 
-  addMember(member: RoomMember): Promise<RoomMember>;
+  joinMember(member: RoomMember): Promise<RoomMember>;
   getMember(roomId: string, userId: string): Promise<RoomMember | null>;
   removeMember(roomId: string, userId: string): Promise<void>;
 
   // Members lookup is scoped by roomId in the room-members table.
   getMembersByRoomId(roomId: string): Promise<RoomMember[]>;
-  countMembers(roomId: string): Promise<number>;
-
   createInvite(invite: RoomInvite): Promise<RoomInvite>;
   getInviteByCode(inviteCode: string): Promise<RoomInvite | null>;
 }

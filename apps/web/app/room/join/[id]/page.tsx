@@ -36,6 +36,29 @@ export default function JoinRoomPage({
           return;
         }
 
+        if (data.isHost) {
+          const activateHostResponse = await fetch(
+            `/api/rooms/${roomId}/join`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            },
+          );
+
+          if (activateHostResponse.ok) {
+            router.replace(`/room/${roomId}`);
+            return;
+          }
+
+          console.error(
+            "Failed to activate host watcher seat",
+            activateHostResponse.status,
+          );
+        }
+
         setRoom(data);
       } catch (err) {
         console.error(err);
@@ -72,8 +95,23 @@ export default function JoinRoomPage({
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        console.error("Join fallback response", res.status, errText);
+        const responseText = await res.text();
+        let errorCode: string | undefined;
+
+        try {
+          const parsedBody = JSON.parse(responseText) as { code?: string };
+          errorCode = parsedBody.code;
+        } catch {
+          errorCode = undefined;
+        }
+
+        if (res.status === 409 && errorCode === "ROOM_CAPACITY_EXCEEDED") {
+          alert("Room is full.");
+          setIsJoining(false);
+          return;
+        }
+
+        console.error("Join fallback response", res.status, responseText);
         throw new Error(`Nepodarilo sa pripojiť: ${res.status}`);
       }
 
@@ -121,6 +159,15 @@ export default function JoinRoomPage({
           </h1>
           <p className="text-muted-foreground mt-2 font-medium break-all">
             ID: {roomId}
+          </p>
+          <p className="mt-2 text-sm font-medium text-muted-foreground">
+            {room.maxCapacity === null
+              ? room.activeWatcherCount === 0
+                ? "No one watching"
+                : room.activeWatcherCount === 1
+                  ? "1 watching"
+                  : `${room.activeWatcherCount} watching`
+              : `${room.activeWatcherCount} / ${room.maxCapacity} watching`}
           </p>
         </div>
 

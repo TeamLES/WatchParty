@@ -5,6 +5,9 @@ import type { RoomMember } from '../entities/room-member.entity';
 import type { Room } from '../entities/room.entity';
 import {
   RoomAlreadyExistsError,
+  RoomCapacityExceededError,
+  RoomMemberAlreadyExistsError,
+  RoomMutationTargetMissingError,
   type RoomsRepository,
 } from './rooms.repository';
 
@@ -88,23 +91,40 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return Promise.resolve(room ? this.cloneRoom(room) : null);
   }
 
-  addMember(member: RoomMember): Promise<RoomMember> {
+  joinMember(member: RoomMember): Promise<RoomMember> {
     this.logger.log(
-      `addMember roomId=${member.roomId} userId=${member.userId}`,
+      `joinMember roomId=${member.roomId} userId=${member.userId}`,
     );
-    let roomMembers = this.membersByRoomId.get(member.roomId);
 
+    const room = this.roomsById.get(member.roomId);
+    if (!room) {
+      throw new RoomMutationTargetMissingError(member.roomId);
+    }
+
+    let roomMembers = this.membersByRoomId.get(member.roomId);
     if (!roomMembers) {
       roomMembers = new Map<string, RoomMember>();
       this.membersByRoomId.set(member.roomId, roomMembers);
     }
 
-    const existing = roomMembers.get(member.userId);
-    if (existing) {
-      return Promise.resolve(this.cloneMember(existing));
+    if (roomMembers.has(member.userId)) {
+      throw new RoomMemberAlreadyExistsError(member.roomId, member.userId);
+    }
+
+    if (
+      room.maxCapacity !== undefined &&
+      room.maxCapacity !== null &&
+      room.activeWatcherCount >= room.maxCapacity
+    ) {
+      throw new RoomCapacityExceededError(member.roomId);
     }
 
     roomMembers.set(member.userId, this.cloneMember(member));
+    this.roomsById.set(member.roomId, {
+      ...this.cloneRoom(room),
+      activeWatcherCount: room.activeWatcherCount + 1,
+    });
+
     return Promise.resolve(this.cloneMember(member));
   }
 
@@ -118,8 +138,15 @@ export class InMemoryRoomsRepository implements RoomsRepository {
   removeMember(roomId: string, userId: string): Promise<void> {
     this.logger.log(`removeMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
-    if (roomMembers) {
+    const room = this.roomsById.get(roomId);
+    const member = roomMembers?.get(userId);
+
+    if (roomMembers && room && member) {
       roomMembers.delete(userId);
+      this.roomsById.set(roomId, {
+        ...this.cloneRoom(room),
+        activeWatcherCount: Math.max(0, room.activeWatcherCount - 1),
+      });
     }
 
     return Promise.resolve();
@@ -138,10 +165,6 @@ export class InMemoryRoomsRepository implements RoomsRepository {
         .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
         .map((member) => this.cloneMember(member)),
     );
-  }
-
-  countMembers(roomId: string): Promise<number> {
-    return Promise.resolve(this.membersByRoomId.get(roomId)?.size ?? 0);
   }
 
   createInvite(invite: RoomInvite): Promise<RoomInvite> {

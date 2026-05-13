@@ -9,6 +9,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
@@ -33,6 +34,7 @@ interface LeaveRoomMessage {
 interface SyncPlaybackMessage {
   action: "syncPlayback";
   roomId: string;
+  videoId?: string;
   sequence: number;
   eventType: PlaybackEventKind;
   state: PlaybackState;
@@ -85,6 +87,7 @@ interface ConnectionRecord {
 
 interface PlaybackSnapshotRecord {
   roomId: string;
+  videoId?: string;
   sequence: number;
   eventType: PlaybackEventKind;
   state: PlaybackState;
@@ -118,6 +121,10 @@ const playbackSnapshotsTable =
   "playback-snapshots";
 const roomsTable =
   process.env.DDB_ROOMS_TABLE ?? process.env.ROOMS_TABLE ?? "rooms";
+const roomMembersTable =
+  process.env.DDB_ROOM_MEMBERS_TABLE ??
+  process.env.ROOM_MEMBERS_TABLE ??
+  "room-members";
 const connectionTtlSeconds = Math.max(
   Number(process.env.CONNECTION_TTL_SECONDS ?? "7200"),
   60,
@@ -244,6 +251,15 @@ function isConditionalCheckFailed(error: unknown): boolean {
   );
 }
 
+function isTransactionCanceled(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "TransactionCanceledException"
+  );
+}
+
 function validateRoomId(roomId: unknown): string | null {
   const value = readString(roomId);
   if (!value || !/^[a-z0-9]{16}$/i.test(value)) {
@@ -258,6 +274,7 @@ function validateSyncPayload(
 ): SyncPlaybackMessage | null {
   const roomId = validateRoomId(body.roomId);
   const eventId = readString(body.eventId);
+  const videoId = readString(body.videoId) ?? undefined;
   const sentAt = readString(body.sentAt) ?? nowIso();
 
   if (
@@ -277,6 +294,7 @@ function validateSyncPayload(
   return {
     action: "syncPlayback",
     roomId,
+    ...(videoId ? { videoId } : {}),
     sequence: body.sequence,
     eventType: body.eventType,
     state: body.state,
@@ -391,6 +409,129 @@ async function listConnectionsByRoom(
   return connections;
 }
 
+async function hasOtherRoomConnection(
+  roomId: string,
+  userId: string,
+  connectionId: string,
+): Promise<boolean> {
+  const connections = await listConnectionsByRoom(roomId);
+
+  return connections.some(
+    (connection) =>
+      connection.connectionId !== connectionId && connection.userId === userId,
+  );
+}
+
+async function releaseActiveWatcherSeat(
+  roomId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    await ddbDocClient.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Delete: {
+              TableName: roomMembersTable,
+              Key: {
+                roomId,
+                userId,
+              },
+              ConditionExpression:
+                "attribute_exists(roomId) AND attribute_exists(userId)",
+            },
+          },
+          {
+            Update: {
+              TableName: roomsTable,
+              Key: {
+                roomId,
+              },
+              UpdateExpression:
+                "SET activeWatcherCount = activeWatcherCount - :one",
+              ConditionExpression:
+                "attribute_exists(roomId) AND activeWatcherCount > :zero",
+              ExpressionAttributeValues: {
+                ":one": 1,
+                ":zero": 0,
+              },
+            },
+          },
+        ],
+      }),
+    );
+  } catch (error) {
+    if (isTransactionCanceled(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function pauseRoomPlaybackIfEmpty(
+  roomId: string,
+  userId: string,
+): Promise<void> {
+  const [room, latestSnapshot] = await Promise.all([
+    getRoom(roomId),
+    getLatestSnapshot(roomId),
+  ]);
+  const activeWatcherCount =
+    typeof room?.activeWatcherCount === "number" ? room.activeWatcherCount : 0;
+
+  if (
+    activeWatcherCount > 0 ||
+    !latestSnapshot ||
+    latestSnapshot.state === "paused"
+  ) {
+    return;
+  }
+
+  const updatedAt = nowIso();
+  const elapsedMs = Math.max(
+    0,
+    Date.now() - Date.parse(latestSnapshot.updatedAt),
+  );
+  const positionMs =
+    latestSnapshot.state === "playing"
+      ? latestSnapshot.positionMs + elapsedMs
+      : latestSnapshot.positionMs;
+
+  try {
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: playbackSnapshotsTable,
+        Item: {
+          roomId,
+          ...(latestSnapshot.videoId
+            ? { videoId: latestSnapshot.videoId }
+            : {}),
+          sequence: latestSnapshot.sequence + 1,
+          eventType: "pause",
+          state: "paused",
+          positionMs,
+          updatedByUserId: userId,
+          updatedAt,
+          eventId: randomUUID(),
+          sentAt: updatedAt,
+        } satisfies PlaybackSnapshotRecord,
+        ConditionExpression:
+          "attribute_not_exists(roomId) AND attribute_not_exists(#sequence)",
+        ExpressionAttributeNames: {
+          "#sequence": "sequence",
+        },
+      }),
+    );
+  } catch (error) {
+    if (isConditionalCheckFailed(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function sendToConnection(
   apiClient: ApiGatewayManagementApiClient,
   connectionId: string,
@@ -467,6 +608,7 @@ function toSnapshotEvent(snapshot: PlaybackSnapshotRecord) {
   return {
     type: "playback.snapshot",
     roomId: snapshot.roomId,
+    videoId: snapshot.videoId ?? null,
     sequence: snapshot.sequence,
     state: snapshot.state,
     positionMs: snapshot.positionMs,
@@ -480,6 +622,7 @@ function defaultSnapshot(roomId: string) {
   return {
     type: "playback.snapshot",
     roomId,
+    videoId: null,
     sequence: 0,
     state: "paused",
     positionMs: 0,
@@ -522,6 +665,14 @@ async function onDisconnect(
 ): Promise<APIGatewayProxyResultV2> {
   const connectionId = event.requestContext.connectionId;
   const connection = await getConnection(connectionId);
+  const shouldReleaseSeat =
+    connection?.roomId && connection.userId
+      ? !(await hasOtherRoomConnection(
+          connection.roomId,
+          connection.userId,
+          connectionId,
+        ))
+      : false;
 
   await ddbDocClient.send(
     new DeleteCommand({
@@ -531,6 +682,11 @@ async function onDisconnect(
   );
 
   if (connection?.roomId) {
+    if (shouldReleaseSeat) {
+      await releaseActiveWatcherSeat(connection.roomId, connection.userId);
+      await pauseRoomPlaybackIfEmpty(connection.roomId, connection.userId);
+    }
+
     await broadcastPresence(event, connection.roomId);
   }
 
@@ -584,6 +740,14 @@ async function onLeaveRoom(
 ): Promise<APIGatewayProxyResultV2> {
   const connectionId = event.requestContext.connectionId;
   const connection = await getConnection(connectionId);
+  const shouldReleaseSeat =
+    connection?.roomId && connection.userId
+      ? !(await hasOtherRoomConnection(
+          connection.roomId,
+          connection.userId,
+          connectionId,
+        ))
+      : false;
 
   await ddbDocClient.send(
     new UpdateCommand({
@@ -598,6 +762,11 @@ async function onLeaveRoom(
   );
 
   if (connection?.roomId) {
+    if (shouldReleaseSeat) {
+      await releaseActiveWatcherSeat(connection.roomId, connection.userId);
+      await pauseRoomPlaybackIfEmpty(connection.roomId, connection.userId);
+    }
+
     await broadcastPresence(event, connection.roomId);
   }
 
@@ -688,6 +857,7 @@ async function onSyncPlayback(
   const updatedAt = nowIso();
   const snapshot: PlaybackSnapshotRecord = {
     roomId: msg.roomId,
+    ...(msg.videoId ? { videoId: msg.videoId } : {}),
     sequence: msg.sequence,
     eventType: msg.eventType,
     state: msg.state,
@@ -721,6 +891,7 @@ async function onSyncPlayback(
   const outboundPayload = {
     type: "playback.sync",
     roomId: snapshot.roomId,
+    videoId: snapshot.videoId ?? null,
     sequence: snapshot.sequence,
     eventType: snapshot.eventType,
     state: snapshot.state,
@@ -862,7 +1033,6 @@ export async function handler(
     return response(500, { message: "Internal server error", route: routeKey });
   }
 }
-
 
 function base64UrlDecode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");

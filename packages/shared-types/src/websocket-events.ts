@@ -2,7 +2,10 @@ import type {
   PlaybackEventKind,
   PlaybackState,
 } from "./tables/playback-snapshots.js";
-export type { PlaybackEventKind, PlaybackState } from "./tables/playback-snapshots.js";
+export type {
+  PlaybackEventKind,
+  PlaybackState,
+} from "./tables/playback-snapshots.js";
 
 export interface JoinRoomMessage {
   action: "joinRoom";
@@ -16,6 +19,7 @@ export interface LeaveRoomMessage {
 export interface SyncPlaybackMessage {
   action: "syncPlayback";
   roomId: string;
+  videoId?: string;
   sequence: number;
   eventType: PlaybackEventKind;
   state: PlaybackState;
@@ -65,6 +69,7 @@ export type WatchPartyInboundWebSocketMessage =
 export interface PlaybackSyncEvent {
   type: "playback.sync";
   roomId: string;
+  videoId?: string | null;
   sequence: number;
   eventType: PlaybackEventKind;
   state: PlaybackState;
@@ -78,6 +83,7 @@ export interface PlaybackSyncEvent {
 export interface PlaybackSnapshotEvent {
   type: "playback.snapshot";
   roomId: string;
+  videoId?: string | null;
   sequence: number;
   state: PlaybackState;
   positionMs: number;

@@ -1,11 +1,14 @@
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -78,4 +81,28 @@ export class CreateRoomDto {
   @IsNotEmpty()
   @MaxLength(120)
   password?: string;
+
+  @ApiPropertyOptional({
+    example: 12,
+    minimum: 2,
+    maximum: 500,
+    description: 'Optional hard room capacity. Omit for an unlimited room.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      return trimmedValue.length > 0 ? Number(trimmedValue) : undefined;
+    }
+
+    return value;
+  })
+  @IsInt()
+  @Min(2)
+  @Max(500)
+  maxCapacity?: number;
 }

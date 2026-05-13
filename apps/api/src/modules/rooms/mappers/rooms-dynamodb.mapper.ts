@@ -13,6 +13,8 @@ export interface RoomItem {
   isPrivate?: boolean;
   password?: string;
   visibilityStatus?: 'public' | 'private';
+  maxCapacity?: number | null;
+  activeWatcherCount: number;
   createdAt: string;
   updatedAt?: string;
 }
@@ -54,6 +56,10 @@ export function toRoomItem(room: Room): RoomItem {
     ...(room.visibilityStatus
       ? { visibilityStatus: room.visibilityStatus }
       : {}),
+    ...(room.maxCapacity !== undefined && room.maxCapacity !== null
+      ? { maxCapacity: room.maxCapacity }
+      : {}),
+    activeWatcherCount: room.activeWatcherCount,
     createdAt: room.createdAt,
     ...(room.updatedAt ? { updatedAt: room.updatedAt } : {}),
   };
@@ -95,6 +101,8 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
   const isPrivate = readBoolean(item.isPrivate) ?? false;
   const password = readNullableString(item.password);
   const hostUserId = readString(item.hostUserId);
+  const maxCapacity = readNullableNumber(item.maxCapacity);
+  const activeWatcherCount = readNullableNumber(item.activeWatcherCount) ?? 0;
   const createdAt = readString(item.createdAt);
   const updatedAt = readNullableString(item.updatedAt);
   const visibilityStatusRaw = readNullableString(item.visibilityStatus);
@@ -122,6 +130,8 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
     ...(password ? { password } : {}),
     ...(visibilityStatus ? { visibilityStatus } : {}),
     hostUserId,
+    ...(maxCapacity !== null ? { maxCapacity } : {}),
+    activeWatcherCount,
     status: 'active',
     createdAt,
     ...(updatedAt ? { updatedAt } : {}),
