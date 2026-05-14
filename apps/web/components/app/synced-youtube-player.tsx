@@ -34,6 +34,7 @@ import type {
   WebSocketTicketResponse,
   ChatMessageEvent,
   ReactionEvent,
+  RoomRoleUpdatedEvent,
 } from "@watchparty/shared-types";
 
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ export interface SyncedYouTubePlayerProps {
   onRemoteVideoId?: (videoId: string) => void;
   onOnlineCountChange?: (onlineCount: number | null) => void;
   onChatEvent?: (event: ChatMessageEvent | ReactionEvent) => void;
+  onRoomRoleUpdated?: (event: RoomRoleUpdatedEvent) => void;
   onFullscreenChange?: (isFullscreen: boolean) => void;
   children?: React.ReactNode;
 }
@@ -202,6 +204,7 @@ export const SyncedYouTubePlayer = forwardRef<
     onRemoteVideoId,
     onOnlineCountChange,
     onChatEvent,
+    onRoomRoleUpdated,
     onFullscreenChange,
     children,
   },
@@ -226,6 +229,7 @@ export const SyncedYouTubePlayer = forwardRef<
   const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
   const onOnlineCountChangeRef = useRef(onOnlineCountChange);
   const onChatEventRef = useRef(onChatEvent);
+  const onRoomRoleUpdatedRef = useRef(onRoomRoleUpdated);
   const onRemoteVideoIdRef = useRef(onRemoteVideoId);
 
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("idle");
@@ -283,6 +287,10 @@ export const SyncedYouTubePlayer = forwardRef<
   useEffect(() => {
     onChatEventRef.current = onChatEvent;
   }, [onChatEvent]);
+
+  useEffect(() => {
+    onRoomRoleUpdatedRef.current = onRoomRoleUpdated;
+  }, [onRoomRoleUpdated]);
 
   useEffect(() => {
     onRemoteVideoIdRef.current = onRemoteVideoId;
@@ -527,7 +535,6 @@ export const SyncedYouTubePlayer = forwardRef<
   const applyRemotePlayback = useCallback(
     (event: PlaybackSnapshotEvent | PlaybackSyncEvent) => {
       if (
-        isHostRef.current ||
         localSegmentActiveRef.current ||
         !playerReadyRef.current ||
         event.roomId !== roomId
@@ -598,6 +605,11 @@ export const SyncedYouTubePlayer = forwardRef<
 
       if (message.type === "chat.message" || message.type === "chat.reaction") {
         onChatEventRef.current?.(message);
+        return;
+      }
+
+      if (message.type === "room_role_updated" && message.roomId === roomId) {
+        onRoomRoleUpdatedRef.current?.(message);
         return;
       }
 
@@ -1055,7 +1067,7 @@ export const SyncedYouTubePlayer = forwardRef<
         {!isHost && (
           <div
             className="absolute inset-0 z-10"
-            title="Only the host can control playback"
+            title="Only the host or co-host can control playback"
           />
         )}
         <div ref={playerMountRef} className="absolute inset-0 h-full w-full" />

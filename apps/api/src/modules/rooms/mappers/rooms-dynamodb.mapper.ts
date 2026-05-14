@@ -5,6 +5,7 @@ import type { Room } from '../entities/room.entity';
 export interface RoomItem {
   roomId: string;
   hostUserId: string;
+  coHostUserId?: string | null;
   title: string;
   videoUrl?: string;
   videoProvider?: string;
@@ -22,7 +23,7 @@ export interface RoomItem {
 export interface RoomMemberItem {
   roomId: string;
   userId: string;
-  role: 'host' | 'viewer';
+  role: 'host' | 'co-host' | 'viewer';
   joinedAt: string;
   lastSeenAt?: string;
   nickname?: string;
@@ -46,6 +47,7 @@ export function toRoomItem(room: Room): RoomItem {
   return {
     roomId: room.roomId,
     hostUserId: room.hostUserId,
+    ...(room.coHostUserId ? { coHostUserId: room.coHostUserId } : {}),
     title: room.title,
     ...(room.videoUrl ? { videoUrl: room.videoUrl } : {}),
     ...(room.videoProvider ? { videoProvider: room.videoProvider } : {}),
@@ -101,6 +103,7 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
   const isPrivate = readBoolean(item.isPrivate) ?? false;
   const password = readNullableString(item.password);
   const hostUserId = readString(item.hostUserId);
+  const coHostUserId = readNullableString(item.coHostUserId);
   const maxCapacity = readNullableNumber(item.maxCapacity);
   const activeWatcherCount = readNullableNumber(item.activeWatcherCount) ?? 0;
   const createdAt = readString(item.createdAt);
@@ -130,6 +133,7 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
     ...(password ? { password } : {}),
     ...(visibilityStatus ? { visibilityStatus } : {}),
     hostUserId,
+    ...(coHostUserId ? { coHostUserId } : {}),
     ...(maxCapacity !== null ? { maxCapacity } : {}),
     activeWatcherCount,
     status: 'active',
@@ -156,7 +160,7 @@ export function fromRoomMemberItem(
     return null;
   }
 
-  if (roleRaw !== 'host' && roleRaw !== 'viewer') {
+  if (roleRaw !== 'host' && roleRaw !== 'co-host' && roleRaw !== 'viewer') {
     return null;
   }
 

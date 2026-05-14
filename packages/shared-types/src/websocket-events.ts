@@ -1,4 +1,8 @@
 import type {
+  RoomMemberResponse,
+  RoomMemberRole,
+} from "./rooms.js";
+import type {
   PlaybackEventKind,
   PlaybackState,
 } from "./tables/playback-snapshots.js";
@@ -99,6 +103,15 @@ export interface PresenceUpdatedEvent {
   updatedAt: string;
 }
 
+export interface RoomRoleUpdatedEvent {
+  type: "room_role_updated";
+  roomId: string;
+  hostUserId: string;
+  coHostUserId: string | null;
+  members: RoomMemberResponse[];
+  updatedAt: string;
+}
+
 export interface WatchPartyWebSocketErrorEvent {
   type: "error";
   message: string;
@@ -125,6 +138,9 @@ export type WatchPartyOutboundWebSocketEvent =
   | PlaybackSyncEvent
   | PlaybackSnapshotEvent
   | PresenceUpdatedEvent
+  | RoomRoleUpdatedEvent
   | ChatMessageEvent
   | ReactionEvent
   | WatchPartyWebSocketErrorEvent;
+
+export type { RoomMemberResponse, RoomMemberRole };

@@ -85,6 +85,23 @@ interface ConnectionRecord {
   expiresAt: number;
 }
 
+type RoomMemberRole = "host" | "co-host" | "viewer";
+
+interface RoomRecord {
+  roomId: string;
+  hostUserId: string;
+  coHostUserId?: string | null;
+  activeWatcherCount?: number;
+}
+
+interface RoomMemberRecord {
+  roomId: string;
+  userId: string;
+  role: RoomMemberRole;
+  joinedAt: string;
+  nickname?: string;
+}
+
 interface PlaybackSnapshotRecord {
   roomId: string;
   videoId?: string;
@@ -317,9 +334,7 @@ async function getConnection(
   return (response.Item ?? null) as ConnectionRecord | null;
 }
 
-async function getRoom(
-  roomId: string,
-): Promise<Record<string, unknown> | null> {
+async function getRoom(roomId: string): Promise<RoomRecord | null> {
   const response = await ddbDocClient.send(
     new GetCommand({
       TableName: roomsTable,
@@ -327,7 +342,91 @@ async function getRoom(
     }),
   );
 
-  return (response.Item ?? null) as Record<string, unknown> | null;
+  return (response.Item ?? null) as RoomRecord | null;
+}
+
+async function listRoomMembers(roomId: string): Promise<RoomMemberRecord[]> {
+  const members: RoomMemberRecord[] = [];
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const response = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: roomMembersTable,
+        KeyConditionExpression: "roomId = :roomId",
+        ExpressionAttributeValues: {
+          ":roomId": roomId,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      }),
+    );
+
+    members.push(...((response.Items ?? []) as RoomMemberRecord[]));
+    lastEvaluatedKey = response.LastEvaluatedKey as
+      | Record<string, unknown>
+      | undefined;
+  } while (lastEvaluatedKey);
+
+  return members;
+}
+
+async function updateRoomCoHost(
+  roomId: string,
+  coHostUserId: string | null,
+): Promise<void> {
+  if (coHostUserId) {
+    await ddbDocClient.send(
+      new UpdateCommand({
+        TableName: roomsTable,
+        Key: { roomId },
+        UpdateExpression: "SET coHostUserId = :coHostUserId",
+        ConditionExpression: "attribute_exists(roomId)",
+        ExpressionAttributeValues: {
+          ":coHostUserId": coHostUserId,
+        },
+      }),
+    );
+    return;
+  }
+
+  await ddbDocClient.send(
+    new UpdateCommand({
+      TableName: roomsTable,
+      Key: { roomId },
+      UpdateExpression: "REMOVE coHostUserId",
+      ConditionExpression: "attribute_exists(roomId)",
+    }),
+  );
+}
+
+async function updateMemberRole(
+  roomId: string,
+  userId: string,
+  role: RoomMemberRole,
+): Promise<void> {
+  try {
+    await ddbDocClient.send(
+      new UpdateCommand({
+        TableName: roomMembersTable,
+        Key: { roomId, userId },
+        UpdateExpression: "SET #role = :role",
+        ConditionExpression:
+          "attribute_exists(roomId) AND attribute_exists(userId)",
+        ExpressionAttributeNames: {
+          "#role": "role",
+        },
+        ExpressionAttributeValues: {
+          ":role": role,
+        },
+      }),
+    );
+  } catch (error) {
+    if (isConditionalCheckFailed(error)) {
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function getLatestSnapshot(
@@ -420,6 +519,166 @@ async function hasOtherRoomConnection(
     (connection) =>
       connection.connectionId !== connectionId && connection.userId === userId,
   );
+}
+
+function resolveMemberRole(
+  hostUserId: string,
+  coHostUserId: string | null,
+  memberUserId: string,
+): RoomMemberRole {
+  if (memberUserId === hostUserId) {
+    return "host";
+  }
+
+  if (coHostUserId && memberUserId === coHostUserId) {
+    return "co-host";
+  }
+
+  return "viewer";
+}
+
+async function normalizeMemberRoles(
+  room: RoomRecord,
+  members: RoomMemberRecord[],
+  coHostUserId: string | null,
+): Promise<boolean> {
+  let changed = false;
+
+  await Promise.all(
+    members.map(async (member) => {
+      const nextRole = resolveMemberRole(
+        room.hostUserId,
+        coHostUserId,
+        member.userId,
+      );
+
+      if (member.role === nextRole) {
+        return;
+      }
+
+      changed = true;
+      await updateMemberRole(member.roomId, member.userId, nextRole);
+      member.role = nextRole;
+    }),
+  );
+
+  return changed;
+}
+
+function toRoomMemberResponse(member: RoomMemberRecord) {
+  return {
+    userId: member.userId,
+    role: member.role,
+    joinedAt: member.joinedAt,
+    nickname: member.nickname ?? null,
+  };
+}
+
+async function ensureRoomHasController(roomId: string): Promise<{
+  room: RoomRecord | null;
+  members: RoomMemberRecord[];
+  changed: boolean;
+}> {
+  const [room, members, connections] = await Promise.all([
+    getRoom(roomId),
+    listRoomMembers(roomId),
+    listConnectionsByRoom(roomId),
+  ]);
+
+  if (!room) {
+    return { room, members: [], changed: false };
+  }
+
+  const onlineUserIds = new Set(
+    connections.map((connection) => connection.userId),
+  );
+  const onlineMembers = members.filter((member) =>
+    onlineUserIds.has(member.userId),
+  );
+
+  if (onlineMembers.length === 0) {
+    const changed = Boolean(room.coHostUserId);
+    if (changed) {
+      await updateRoomCoHost(roomId, null);
+      room.coHostUserId = null;
+    }
+    const rolesChanged = await normalizeMemberRoles(room, members, null);
+    return { room, members, changed: changed || rolesChanged };
+  }
+
+  const hostOnline = onlineMembers.some(
+    (member) => member.userId === room.hostUserId,
+  );
+  const coHostUserId = room.coHostUserId ?? null;
+  const coHostOnline =
+    coHostUserId !== null &&
+    onlineMembers.some((member) => member.userId === coHostUserId);
+
+  if (hostOnline || coHostOnline) {
+    const changed = await normalizeMemberRoles(room, members, coHostUserId);
+    return { room, members, changed };
+  }
+
+  const eligibleMembers = onlineMembers.filter(
+    (member) => member.userId !== room.hostUserId && member.role !== "host",
+  );
+  const nextCoHost =
+    eligibleMembers.length > 0
+      ? eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)]
+      : null;
+  const nextCoHostUserId = nextCoHost?.userId ?? null;
+  const changed = coHostUserId !== nextCoHostUserId;
+
+  if (changed) {
+    await updateRoomCoHost(roomId, nextCoHostUserId);
+    room.coHostUserId = nextCoHostUserId;
+  }
+
+  const rolesChanged = await normalizeMemberRoles(
+    room,
+    members,
+    nextCoHostUserId,
+  );
+
+  return { room, members, changed: changed || rolesChanged };
+}
+
+async function broadcastRoomRoleUpdated(
+  event: APIGatewayProxyWebsocketEventV2,
+  roomId: string,
+  room: RoomRecord,
+  members: RoomMemberRecord[],
+): Promise<void> {
+  await broadcastToRoom(event, roomId, {
+    type: "room_role_updated",
+    roomId,
+    hostUserId: room.hostUserId,
+    coHostUserId: room.coHostUserId ?? null,
+    members: members.map(toRoomMemberResponse),
+    updatedAt: nowIso(),
+  });
+}
+
+async function isRoomController(
+  roomId: string,
+  userId: string,
+): Promise<{
+  isController: boolean;
+  room: RoomRecord | null;
+  members: RoomMemberRecord[];
+  rolesChanged: boolean;
+}> {
+  const ensured = await ensureRoomHasController(roomId);
+  const isController =
+    ensured.room?.hostUserId === userId ||
+    ensured.room?.coHostUserId === userId;
+
+  return {
+    isController,
+    room: ensured.room,
+    members: ensured.members,
+    rolesChanged: ensured.changed,
+  };
 }
 
 async function releaseActiveWatcherSeat(
@@ -687,6 +946,15 @@ async function onDisconnect(
       await pauseRoomPlaybackIfEmpty(connection.roomId, connection.userId);
     }
 
+    const controllerState = await ensureRoomHasController(connection.roomId);
+    if (controllerState.room && controllerState.changed) {
+      await broadcastRoomRoleUpdated(
+        event,
+        connection.roomId,
+        controllerState.room,
+        controllerState.members,
+      );
+    }
     await broadcastPresence(event, connection.roomId);
   }
 
@@ -730,6 +998,15 @@ async function onJoinRoom(
     connectionId,
     latestSnapshot ? toSnapshotEvent(latestSnapshot) : defaultSnapshot(roomId),
   );
+  const controllerState = await ensureRoomHasController(roomId);
+  if (controllerState.room && controllerState.changed) {
+    await broadcastRoomRoleUpdated(
+      event,
+      roomId,
+      controllerState.room,
+      controllerState.members,
+    );
+  }
   await broadcastPresence(event, roomId);
 
   return response(200, { ok: true, route: "joinRoom" });
@@ -767,6 +1044,15 @@ async function onLeaveRoom(
       await pauseRoomPlaybackIfEmpty(connection.roomId, connection.userId);
     }
 
+    const controllerState = await ensureRoomHasController(connection.roomId);
+    if (controllerState.room && controllerState.changed) {
+      await broadcastRoomRoleUpdated(
+        event,
+        connection.roomId,
+        controllerState.room,
+        controllerState.members,
+      );
+    }
     await broadcastPresence(event, connection.roomId);
   }
 
@@ -828,21 +1114,30 @@ async function onSyncPlayback(
     return response(400, { message: "Invalid syncPlayback payload" });
   }
 
-  const [connection, room] = await Promise.all([
-    getConnection(connectionId),
-    getRoom(msg.roomId),
-  ]);
-
-  if (!room) {
-    return response(404, { message: "Room not found" });
-  }
-
-  if (room.hostUserId !== userId) {
-    return response(403, { message: "Only the room host can sync playback" });
-  }
+  const connection = await getConnection(connectionId);
 
   if (connection?.roomId !== msg.roomId) {
     return response(403, { message: "Connection has not joined this room" });
+  }
+
+  const controllerCheck = await isRoomController(msg.roomId, userId);
+  if (!controllerCheck.room) {
+    return response(404, { message: "Room not found" });
+  }
+
+  if (controllerCheck.rolesChanged) {
+    await broadcastRoomRoleUpdated(
+      event,
+      msg.roomId,
+      controllerCheck.room,
+      controllerCheck.members,
+    );
+  }
+
+  if (!controllerCheck.isController) {
+    return response(403, {
+      message: "Only the room host or co-host can sync playback",
+    });
   }
 
   const latestSnapshot = await getLatestSnapshot(msg.roomId);

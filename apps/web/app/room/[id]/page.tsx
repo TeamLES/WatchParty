@@ -12,6 +12,8 @@ import {
   Share2Icon,
   TrashIcon,
   PanelRightCloseIcon,
+  ShuffleIcon,
+  UserCheckIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type {
@@ -22,6 +24,7 @@ import type {
   GetRoomResponse,
   HighlightResponse,
   RoomMemberResponse,
+  RoomRoleUpdatedEvent,
   ChatMessageEvent,
   ReactionEvent,
   UpdateHighlightRequest,
@@ -112,6 +115,9 @@ export default function RoomPage({
   const [editTitle, setEditTitle] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
+  const [settingCoHostUserId, setSettingCoHostUserId] = useState<string | null>(
+    null,
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
@@ -487,6 +493,27 @@ export default function RoomPage({
     ],
   );
 
+  const handleRoomRoleUpdated = useCallback(
+    (event: RoomRoleUpdatedEvent) => {
+      setRoom((prevRoom) => {
+        if (!prevRoom || prevRoom.roomId !== event.roomId) {
+          return prevRoom;
+        }
+
+        const isCoHost = currentUserId === event.coHostUserId;
+
+        return {
+          ...prevRoom,
+          coHostUserId: event.coHostUserId,
+          members: event.members,
+          isCoHost,
+          isController: prevRoom.isHost || isCoHost,
+        };
+      });
+    },
+    [currentUserId],
+  );
+
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
@@ -775,7 +802,7 @@ export default function RoomPage({
   };
 
   const handleKickMember = async (memberUserId: string) => {
-    if (!room?.isHost) {
+    if (!room?.isController) {
       return;
     }
 
@@ -805,6 +832,37 @@ export default function RoomPage({
     }
   };
 
+  const handleSetCoHost = async (memberUserId?: string) => {
+    if (!room?.isHost) {
+      return;
+    }
+
+    setSettingCoHostUserId(memberUserId ?? "random");
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/co-host`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(memberUserId ? { userId: memberUserId } : {}),
+      });
+
+      if (!res.ok) {
+        console.error("Failed to set co-host");
+        return;
+      }
+
+      const latestRoom = (await res.json()) as GetRoomResponse;
+      setRoom(latestRoom);
+    } catch (error) {
+      console.error(error);
+      alert("Unable to update the co-host right now.");
+    } finally {
+      setSettingCoHostUserId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-surface flex min-h-screen items-center justify-center text-foreground">
@@ -824,8 +882,8 @@ export default function RoomPage({
     );
   }
 
-  // If API does not send isHost yet, keep controls available instead of hiding the input.
-  const canControlVideo = room.isHost;
+  const canControlPlayback = room.isController;
+  const canManageRoomVideo = room.isHost;
   const watchingCount = room.activeWatcherCount;
   const highlightPreviewEndMs =
     highlightCapturePositionMs ?? lastKnownPositionMs;
@@ -855,6 +913,11 @@ export default function RoomPage({
                         Host
                       </span>
                     )}
+                    {room.isCoHost && !room.isHost && (
+                      <span className="text-[10px] bg-emerald-400/15 text-emerald-500 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                        Co-Host
+                      </span>
+                    )}
                   </h1>
                   <div className="flex items-center gap-2 mt-1">
                     <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
@@ -870,7 +933,7 @@ export default function RoomPage({
                             : `${watchingCount} watching`
                         : `${watchingCount} / ${room.maxCapacity} watching`}
                     </p>
-                    {!canControlVideo && (
+                    {!canControlPlayback && (
                       <span className="rounded bg-accent/55 px-1.5 text-[11px] text-muted-foreground/90 dark:bg-white/5 dark:text-muted-foreground/80">
                         View-only mode
                       </span>
@@ -917,7 +980,7 @@ export default function RoomPage({
             </div>
 
             {/* Bottom row: Video Control Panel */}
-            {canControlVideo && (
+            {canManageRoomVideo && (
               <div className="flex w-full flex-col items-center gap-3 border-t border-border/50 pt-4 dark:border-white/5 sm:flex-row">
                 <div className="flex-1 w-full relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
@@ -955,13 +1018,14 @@ export default function RoomPage({
               ref={socketPlayerRef}
               roomId={roomId}
               videoId={activeVideoId}
-              isHost={canControlVideo}
+              isHost={canControlPlayback}
               startPlaybackSignal={startPlaybackSignal}
               onRemoteVideoId={(nextVideoId) => {
                 setActiveVideoId(nextVideoId);
                 setVideoUrl(`https://www.youtube.com/watch?v=${nextVideoId}`);
               }}
               onChatEvent={handleChatEvent}
+              onRoomRoleUpdated={handleRoomRoleUpdated}
               onFullscreenChange={setIsFullscreen}
             >
               {/* Flying Emojis */}
@@ -1330,55 +1394,109 @@ export default function RoomPage({
           </div>
 
           <div className="space-y-3">
-            <label className="text-sm font-semibold text-muted-foreground">
-              Active Watchers (
-              {room?.maxCapacity === null
-                ? room?.activeWatcherCount
-                : `${room?.activeWatcherCount} / ${room?.maxCapacity}`}
-              )
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="text-sm font-semibold text-muted-foreground">
+                Active Watchers (
+                {room?.maxCapacity === null
+                  ? room?.activeWatcherCount
+                  : `${room?.activeWatcherCount} / ${room?.maxCapacity}`}
+                )
+              </label>
+              {room?.isHost && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 rounded-lg px-3 text-xs"
+                  onClick={() => void handleSetCoHost()}
+                  disabled={settingCoHostUserId !== null}
+                >
+                  <ShuffleIcon className="mr-1.5 size-3.5" />
+                  {settingCoHostUserId === "random"
+                    ? "Choosing..."
+                    : "Random Co-Host"}
+                </Button>
+              )}
+            </div>
             <div className="flex flex-col gap-2 max-h-50 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {(room?.members ?? []).map((member) => {
                 const isCurrentUser = currentUserId === member.userId;
                 const displayName = formatMemberDisplayName(member);
                 const avatarLabel = displayName.charAt(0).toUpperCase() || "U";
                 const canKickMember =
-                  room?.isHost && member.role !== "host" && !isCurrentUser;
+                  !isCurrentUser &&
+                  ((room?.isHost && member.role !== "host") ||
+                    (room?.isCoHost && member.role === "viewer"));
+                const canMakeCoHost =
+                  room?.isHost &&
+                  member.role === "viewer" &&
+                  member.userId !== room.hostUserId;
 
                 return (
                   <div
                     key={member.userId}
-                    className="flex items-center justify-between rounded-xl border border-border/50 bg-card/70 p-3 dark:border-white/5 dark:bg-black/20"
+                    className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/70 p-3 dark:border-white/5 dark:bg-black/20 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
                         {avatarLabel}
                       </div>
-                      <span className="text-sm font-medium">
-                        {displayName}
-                        {isCurrentUser ? " (you)" : ""}
-                        {member.role === "host" && (
-                          <span className="ml-2 text-[10px] text-primary">
-                            HOST
-                          </span>
-                        )}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {displayName}
+                          {isCurrentUser ? " (you)" : ""}
+                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {member.role === "host" && (
+                            <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                              HOST
+                            </span>
+                          )}
+                          {member.role === "co-host" && (
+                            <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">
+                              CO-HOST
+                            </span>
+                          )}
+                          {member.role === "viewer" && (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                              VIEWER
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    {canKickMember ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg px-3"
-                        onClick={() => void handleKickMember(member.userId)}
-                        disabled={kickingMemberId === member.userId}
-                      >
-                        {kickingMemberId === member.userId
-                          ? "Kicking..."
-                          : "Kick"}
-                      </Button>
-                    ) : null}
+                    <div className="flex flex-wrap gap-2 sm:justify-end">
+                      {canMakeCoHost ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 rounded-lg px-3 text-xs"
+                          onClick={() => void handleSetCoHost(member.userId)}
+                          disabled={settingCoHostUserId !== null}
+                        >
+                          <UserCheckIcon className="mr-1.5 size-3.5" />
+                          {settingCoHostUserId === member.userId
+                            ? "Setting..."
+                            : "Make Co-Host"}
+                        </Button>
+                      ) : null}
+                      {canKickMember ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg px-3"
+                          onClick={() => void handleKickMember(member.userId)}
+                          disabled={kickingMemberId === member.userId}
+                        >
+                          {kickingMemberId === member.userId
+                            ? "Kicking..."
+                            : "Kick"}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}

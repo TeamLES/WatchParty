@@ -40,6 +40,11 @@ export interface RoomsRepository {
 
   joinMember(member: RoomMember): Promise<RoomMember>;
   getMember(roomId: string, userId: string): Promise<RoomMember | null>;
+  updateMemberRole(
+    roomId: string,
+    userId: string,
+    role: RoomMember['role'],
+  ): Promise<RoomMember | null>;
   removeMember(roomId: string, userId: string): Promise<void>;
 
   // Members lookup is scoped by roomId in the room-members table.

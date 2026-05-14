@@ -33,6 +33,7 @@ export type {
   PlaybackSnapshotEvent,
   PlaybackSyncEvent,
   PresenceUpdatedEvent,
+  RoomRoleUpdatedEvent,
   GetPlaybackSnapshotMessage,
   SyncPlaybackMessage,
   WebSocketTicketResponse,

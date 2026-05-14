@@ -5,6 +5,7 @@ export type RoomVisibilityStatus = "public" | "private";
 export interface Room {
   roomId: string;
   hostUserId: string;
+  coHostUserId?: string | null;
   title: string;
   videoUrl?: string;
   status: RoomStatus;

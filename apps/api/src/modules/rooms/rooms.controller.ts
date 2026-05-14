@@ -41,6 +41,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { KickRoomMemberDto } from './dto/kick-room-member.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
+import { SetRoomCoHostDto } from './dto/set-room-co-host.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
 
@@ -191,6 +192,29 @@ export class RoomsController {
     );
 
     return { message: 'Member kicked successfully' };
+  }
+
+  @Post(':roomId/co-host')
+  @ApiOperation({ summary: 'Set or randomly assign a room co-host (host only)' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiBody({ type: SetRoomCoHostDto, required: false })
+  @ApiOkResponse({ description: 'Co-host updated' })
+  @ApiBadRequestResponse({ description: 'Invalid roomId or co-host payload' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiForbiddenResponse({ description: 'Only host can set a co-host' })
+  @ApiNotFoundResponse({ description: 'Room or member not found' })
+  async setRoomCoHost(
+    @Param() params: RoomIdParamDto,
+    @Body() setRoomCoHostDto: SetRoomCoHostDto = {},
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<GetRoomResponse> {
+    const userId = this.getRequiredUserSub(user);
+
+    return this.roomsService.setCoHost(
+      params.roomId,
+      userId,
+      setRoomCoHostDto?.userId ?? null,
+    );
   }
 
   @Post(':roomId/invites')

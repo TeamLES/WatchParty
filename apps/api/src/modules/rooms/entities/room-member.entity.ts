@@ -1,4 +1,4 @@
-export type RoomMemberRole = 'host' | 'viewer';
+export type RoomMemberRole = 'host' | 'co-host' | 'viewer';
 
 export interface RoomMember {
   roomId: string;

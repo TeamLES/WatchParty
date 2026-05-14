@@ -67,4 +67,59 @@ export class RealtimePresenceService {
       return null;
     }
   }
+
+  async listOnlineUserIdsByRoom(roomId: string): Promise<Set<string> | null> {
+    if (!this.documentClient || !this.tableName) {
+      return null;
+    }
+
+    try {
+      const userIds = new Set<string>();
+      let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+      do {
+        const response = await this.documentClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            IndexName: 'room-index',
+            KeyConditionExpression: 'roomId = :roomId',
+            ExpressionAttributeValues: {
+              ':roomId': roomId,
+            },
+            ProjectionExpression: 'userId',
+            ExclusiveStartKey: lastEvaluatedKey,
+          }),
+        );
+
+        for (const item of response.Items ?? []) {
+          const userId =
+            typeof item.userId === 'string' && item.userId.length > 0
+              ? item.userId
+              : null;
+
+          if (userId) {
+            userIds.add(userId);
+          }
+        }
+
+        lastEvaluatedKey = response.LastEvaluatedKey as
+          | Record<string, unknown>
+          | undefined;
+      } while (lastEvaluatedKey);
+
+      return userIds;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `listOnlineUserIdsByRoom failed roomId=${roomId} error=${message}`,
+      );
+      return null;
+    }
+  }
+
+  async broadcastToRoom(roomId: string, payload: unknown): Promise<void> {
+    this.logger.debug(
+      `broadcastToRoom skipped roomId=${roomId} payloadType=${typeof payload}`,
+    );
+  }
 }

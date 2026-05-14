@@ -17,6 +17,7 @@ import type {
   GetRoomsResponse,
   JoinRoomResponse,
   RoomMemberResponse,
+  RoomMemberRole,
   RoomSummaryResponse,
 } from '@watchparty/shared-types';
 import { RealtimePresenceService } from '../realtime/realtime-presence.service';
@@ -81,6 +82,7 @@ export class RoomsService {
         ...(password ? { password } : {}),
         visibilityStatus: isPrivate ? 'private' : 'public',
         hostUserId: userId,
+        coHostUserId: null,
         ...(createRoomDto.maxCapacity !== undefined
           ? { maxCapacity: createRoomDto.maxCapacity }
           : {}),
@@ -199,12 +201,15 @@ export class RoomsService {
       this.realtimePresenceService.countOnlineByRoom(roomId),
     ]);
     const isHost = room.hostUserId === userId;
+    const isCoHost = room.coHostUserId === userId;
     const isMember = members.some((member) => member.userId === userId);
 
     return {
       ...this.toRoomSummaryResponse(room, onlineCount),
       members: members.map((member) => this.toRoomMemberResponse(member)),
       isHost,
+      isCoHost,
+      isController: isHost || isCoHost,
       isMember,
     };
   }
@@ -289,6 +294,7 @@ export class RoomsService {
     }
 
     this.logger.log(`joinRoom success roomId=${roomId} userId=${userId}`);
+    await this.ensureRoomHasController(roomId);
 
     return {
       roomId,
@@ -312,21 +318,34 @@ export class RoomsService {
     }
 
     await this.roomsRepository.removeMember(roomId, userId);
+    await this.ensureRoomHasController(roomId);
     this.logger.log(`leaveRoom success roomId=${roomId} userId=${userId}`);
   }
 
   async kickMember(
     roomId: string,
-    hostUserId: string,
+    actorUserId: string,
     memberUserId: string,
   ): Promise<void> {
     this.logger.log(
-      `kickMember roomId=${roomId} hostUserId=${hostUserId} memberUserId=${memberUserId}`,
+      `kickMember roomId=${roomId} actorUserId=${actorUserId} memberUserId=${memberUserId}`,
     );
     const room = await this.getRoomOrThrow(roomId);
+    const actorMember = await this.roomsRepository.getMember(
+      roomId,
+      actorUserId,
+    );
+    const isHostActor = room.hostUserId === actorUserId;
+    const isCoHostActor = room.coHostUserId === actorUserId;
 
-    if (room.hostUserId !== hostUserId) {
-      throw new ForbiddenException('Only the host can kick members');
+    if (!isHostActor && !isCoHostActor) {
+      throw new ForbiddenException('Only room controllers can kick members');
+    }
+
+    if (!isHostActor && !actorMember) {
+      throw new ForbiddenException(
+        'Only active room controllers can kick members',
+      );
     }
 
     if (memberUserId === room.hostUserId) {
@@ -339,9 +358,93 @@ export class RoomsService {
       throw new NotFoundException('Member not found in this room');
     }
 
+    if (member.userId === actorUserId) {
+      throw new BadRequestException('You cannot kick yourself from the room');
+    }
+
+    if (isCoHostActor && member.role === 'co-host') {
+      throw new ForbiddenException('Co-host cannot kick another co-host');
+    }
+
     await this.roomsRepository.removeMember(roomId, memberUserId);
+    await this.ensureRoomHasController(roomId);
     this.logger.log(
-      `kickMember success roomId=${roomId} hostUserId=${hostUserId} memberUserId=${memberUserId}`,
+      `kickMember success roomId=${roomId} actorUserId=${actorUserId} memberUserId=${memberUserId}`,
+    );
+  }
+
+  async setCoHost(
+    roomId: string,
+    actorUserId: string,
+    requestedUserId?: string | null,
+  ): Promise<GetRoomResponse> {
+    this.logger.log(
+      `setCoHost roomId=${roomId} actorUserId=${actorUserId} requestedUserId=${requestedUserId ?? '(random)'}`,
+    );
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (room.hostUserId !== actorUserId) {
+      throw new ForbiddenException('Only the host can set a co-host');
+    }
+
+    const targetUserId = requestedUserId?.trim() || null;
+
+    if (targetUserId === room.hostUserId) {
+      throw new BadRequestException('Host is already the room controller');
+    }
+
+    const members = await this.roomsRepository.getMembersByRoomId(roomId);
+    const targetMember = targetUserId
+      ? members.find((member) => member.userId === targetUserId)
+      : await this.pickEligibleCoHost(room, members);
+
+    if (targetUserId && !targetMember) {
+      throw new NotFoundException('Member not found in this room');
+    }
+
+    const updatedRoom = await this.applyCoHostSelection(
+      room,
+      members,
+      targetMember?.userId ?? null,
+    );
+
+    return this.getRoom(updatedRoom.roomId, actorUserId);
+  }
+
+  async isRoomController(roomId: string, userId: string): Promise<boolean> {
+    const room = await this.getRoomOrThrow(roomId);
+
+    return room.hostUserId === userId || room.coHostUserId === userId;
+  }
+
+  async ensureRoomHasController(roomId: string): Promise<Room> {
+    const room = await this.getRoomOrThrow(roomId);
+    const members = await this.roomsRepository.getMembersByRoomId(roomId);
+
+    if (members.length === 0) {
+      return this.applyCoHostSelection(room, members, null);
+    }
+
+    const activeMembers = await this.getActiveMembers(roomId, members);
+    const hostOnline = activeMembers.some(
+      (member) => member.userId === room.hostUserId,
+    );
+    const coHostOnline =
+      room.coHostUserId !== undefined &&
+      room.coHostUserId !== null &&
+      activeMembers.some((member) => member.userId === room.coHostUserId);
+
+    if (hostOnline || coHostOnline) {
+      await this.normalizeMemberRoles(room, members, room.coHostUserId ?? null);
+      return room;
+    }
+
+    const targetMember = await this.pickEligibleCoHost(room, activeMembers);
+
+    return this.applyCoHostSelection(
+      room,
+      members,
+      targetMember?.userId ?? null,
     );
   }
 
@@ -435,6 +538,7 @@ export class RoomsService {
       isPrivate: room.isPrivate,
       password: room.password ?? null,
       hostUserId: room.hostUserId,
+      coHostUserId: room.coHostUserId ?? null,
       maxCapacity: room.maxCapacity ?? null,
       activeWatcherCount: room.activeWatcherCount,
       onlineCount,
@@ -453,5 +557,120 @@ export class RoomsService {
 
   private generateInviteCode(): string {
     return randomBytes(6).toString('hex');
+  }
+
+  private async getActiveMembers(
+    roomId: string,
+    members: RoomMember[],
+  ): Promise<RoomMember[]> {
+    const onlineUserIds =
+      await this.realtimePresenceService.listOnlineUserIdsByRoom(roomId);
+
+    if (onlineUserIds === null) {
+      return members;
+    }
+
+    return members.filter((member) =>
+      onlineUserIds.has(member.userId),
+    );
+  }
+
+  private pickEligibleCoHost(
+    room: Room,
+    members: RoomMember[],
+  ): RoomMember | null {
+    const eligibleMembers = members.filter(
+      (member) => member.userId !== room.hostUserId && member.role !== 'host',
+    );
+
+    if (eligibleMembers.length === 0) {
+      return null;
+    }
+
+    return eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)];
+  }
+
+  private async applyCoHostSelection(
+    room: Room,
+    members: RoomMember[],
+    coHostUserId: string | null,
+  ): Promise<Room> {
+    const updatedRoom: Room = {
+      ...room,
+      coHostUserId,
+      updatedAt: this.nowIsoString(),
+    };
+
+    await this.roomsRepository.updateRoom(updatedRoom);
+    await this.normalizeMemberRoles(updatedRoom, members, coHostUserId);
+    await this.broadcastRoomRoleUpdated(updatedRoom, members, coHostUserId);
+
+    return updatedRoom;
+  }
+
+  private async normalizeMemberRoles(
+    room: Room,
+    members: RoomMember[],
+    coHostUserId: string | null,
+  ): Promise<void> {
+    await Promise.all(
+      members.map((member) => {
+        const nextRole = this.resolveMemberRole(
+          room.hostUserId,
+          coHostUserId,
+          member.userId,
+        );
+
+        if (member.role === nextRole) {
+          return Promise.resolve(null);
+        }
+
+        return this.roomsRepository.updateMemberRole(
+          member.roomId,
+          member.userId,
+          nextRole,
+        );
+      }),
+    );
+  }
+
+  private resolveMemberRole(
+    hostUserId: string,
+    coHostUserId: string | null,
+    memberUserId: string,
+  ): RoomMemberRole {
+    if (memberUserId === hostUserId) {
+      return 'host';
+    }
+
+    if (coHostUserId && memberUserId === coHostUserId) {
+      return 'co-host';
+    }
+
+    return 'viewer';
+  }
+
+  private async broadcastRoomRoleUpdated(
+    room: Room,
+    members: RoomMember[],
+    coHostUserId: string | null,
+  ): Promise<void> {
+    await this.realtimePresenceService.broadcastToRoom(room.roomId, {
+      type: 'room_role_updated',
+      roomId: room.roomId,
+      hostUserId: room.hostUserId,
+      coHostUserId,
+      members: members.map((member) =>
+        this.toRoomMemberResponse({
+          ...member,
+          role: this.resolveMemberRole(
+            room.hostUserId,
+            coHostUserId,
+            member.userId,
+          ),
+        }),
+      ),
+      updatedAt: this.nowIsoString(),
+    });
   }
 }

@@ -135,6 +135,30 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return Promise.resolve(member ? this.cloneMember(member) : null);
   }
 
+  updateMemberRole(
+    roomId: string,
+    userId: string,
+    role: RoomMember['role'],
+  ): Promise<RoomMember | null> {
+    this.logger.log(
+      `updateMemberRole roomId=${roomId} userId=${userId} role=${role}`,
+    );
+    const roomMembers = this.membersByRoomId.get(roomId);
+    const member = roomMembers?.get(userId);
+
+    if (!roomMembers || !member) {
+      return Promise.resolve(null);
+    }
+
+    const updatedMember = {
+      ...this.cloneMember(member),
+      role,
+    };
+    roomMembers.set(userId, updatedMember);
+
+    return Promise.resolve(this.cloneMember(updatedMember));
+  }
+
   removeMember(roomId: string, userId: string): Promise<void> {
     this.logger.log(`removeMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);

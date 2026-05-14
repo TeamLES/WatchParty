@@ -8,6 +8,7 @@ import {
   QueryCommand,
   ScanCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
   Injectable,
@@ -336,6 +337,50 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
 
     return fromRoomMemberItem(asRecord(response.Item));
+  }
+
+  async updateMemberRole(
+    roomId: string,
+    userId: string,
+    role: RoomMember['role'],
+  ): Promise<RoomMember | null> {
+    this.logger.log(
+      `updateMemberRole roomId=${roomId} userId=${userId} role=${role}`,
+    );
+
+    try {
+      const response = await this.documentClient.send(
+        new UpdateCommand({
+          TableName: this.tables.roomMembers,
+          Key: {
+            roomId,
+            userId,
+          },
+          UpdateExpression: 'SET #role = :role',
+          ConditionExpression:
+            'attribute_exists(roomId) AND attribute_exists(userId)',
+          ExpressionAttributeNames: {
+            '#role': 'role',
+          },
+          ExpressionAttributeValues: {
+            ':role': role,
+          },
+          ReturnValues: 'ALL_NEW',
+        }),
+      );
+
+      return fromRoomMemberItem(asRecord(response.Attributes));
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) {
+        return null;
+      }
+
+      throw this.toInfrastructureException(
+        'updateMemberRole',
+        error,
+        'roomMembers',
+      );
+    }
   }
 
   async removeMember(roomId: string, userId: string): Promise<void> {
