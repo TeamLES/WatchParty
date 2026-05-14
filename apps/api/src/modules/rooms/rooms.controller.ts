@@ -262,7 +262,9 @@ export class RoomsController {
   }
 
   @Post(':roomId/co-host')
-  @ApiOperation({ summary: 'Set or randomly assign a room co-host (host only)' })
+  @ApiOperation({
+    summary: 'Set or randomly assign a room co-host (host only)',
+  })
   @ApiParam({ name: 'roomId', type: String })
   @ApiBody({ type: SetRoomCoHostDto, required: false })
   @ApiOkResponse({ description: 'Co-host updated' })

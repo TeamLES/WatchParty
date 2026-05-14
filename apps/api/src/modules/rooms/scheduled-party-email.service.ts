@@ -25,8 +25,13 @@ export class ScheduledPartyEmailService {
       'eu-central-1';
     this.fromEmail =
       this.configService.get<string>('SES_FROM_EMAIL')?.trim() || null;
-    this.isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    this.isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
     this.sesClient = new SESClient({ region });
+
+    this.logger.log(
+      `Initializing ScheduledPartyEmailService: isProduction=${this.isProduction}, region=${region}, hasFromEmail=${!!this.fromEmail}`,
+    );
 
     if (!this.fromEmail) {
       this.logger.warn(
@@ -37,7 +42,11 @@ export class ScheduledPartyEmailService {
 
   async sendScheduledPartyReminderEmail(
     params: SendScheduledPartyReminderEmailParams,
-  ): Promise<void> {
+  ): Promise<{
+    delivered: boolean;
+    provider: 'ses' | 'dev-log';
+    messageId?: string;
+  }> {
     const subject = `WatchParty reminder: ${params.partyTitle} starts soon`;
     const startLabel = new Date(params.scheduledStartAt).toLocaleString('en', {
       dateStyle: 'medium',
@@ -71,35 +80,63 @@ export class ScheduledPartyEmailService {
       }
 
       this.logger.log(
-        `dev email reminder to=${params.to} subject="${subject}" roomUrl=${params.roomUrl}`,
+        `[dev-log] Dev email reminder to=${params.to} subject="${subject}" roomUrl=${params.roomUrl}`,
       );
-      return;
+      return { delivered: false, provider: 'dev-log' };
     }
 
-    await this.sesClient.send(
-      new SendEmailCommand({
-        Source: this.fromEmail,
-        Destination: {
-          ToAddresses: [params.to],
-        },
-        Message: {
-          Subject: {
-            Data: subject,
-            Charset: 'UTF-8',
-          },
-          Body: {
-            Text: {
-              Data: textBody,
-              Charset: 'UTF-8',
-            },
-            Html: {
-              Data: htmlBody,
-              Charset: 'UTF-8',
-            },
-          },
-        },
-      }),
+    this.logger.log(
+      `Sending SES reminder to=${params.to} subject="${subject}" source=${this.fromEmail}`,
     );
+
+    try {
+      const response = await this.sesClient.send(
+        new SendEmailCommand({
+          Source: this.fromEmail,
+          Destination: {
+            ToAddresses: [params.to],
+          },
+          Message: {
+            Subject: {
+              Data: subject,
+              Charset: 'UTF-8',
+            },
+            Body: {
+              Text: {
+                Data: textBody,
+                Charset: 'UTF-8',
+              },
+              Html: {
+                Data: htmlBody,
+                Charset: 'UTF-8',
+              },
+            },
+          },
+        }),
+      );
+
+      this.logger.log(
+        `SES reminder sent to=${params.to} messageId=${response.MessageId}`,
+      );
+      return {
+        delivered: true,
+        provider: 'ses',
+        messageId: response.MessageId,
+      };
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const awsRequestId = (
+        (error as Record<string, unknown>)?.$metadata as Record<string, unknown>
+      )?.requestId as string | undefined;
+
+      this.logger.error(
+        `Failed to send SES reminder to=${params.to}: [${errorName}] ${errorMessage} (RequestId: ${awsRequestId || 'N/A'})`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 }
 

@@ -369,7 +369,11 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
         throw new RoomMutationTargetMissingError(member.roomId);
       }
 
-      throw this.toInfrastructureException('createMember', error, 'roomMembers');
+      throw this.toInfrastructureException(
+        'createMember',
+        error,
+        'roomMembers',
+      );
     }
   }
 
@@ -415,7 +419,11 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
         return null;
       }
 
-      throw this.toInfrastructureException('updateMember', error, 'roomMembers');
+      throw this.toInfrastructureException(
+        'updateMember',
+        error,
+        'roomMembers',
+      );
     }
   }
 

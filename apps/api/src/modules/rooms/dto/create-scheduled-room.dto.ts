@@ -35,7 +35,9 @@ export class CreateScheduledRoomDto {
   @MaxLength(1000)
   description?: string;
 
-  @ApiPropertyOptional({ example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
+  @ApiPropertyOptional({
+    example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  })
   @IsOptional()
   @IsString()
   @Transform(({ value }: { value: unknown }) =>

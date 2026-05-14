@@ -175,6 +175,7 @@ export default function RoomPage({
   const [lastKnownPositionMs, setLastKnownPositionMs] = useState(0);
   const [attendees, setAttendees] = useState<RoomMemberResponse[]>([]);
   const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
+  const [isPastScheduledTime, setIsPastScheduledTime] = useState(false);
   const [playingHighlight, setPlayingHighlight] = useState<{
     highlight: HighlightResponse;
     shouldRender: boolean;
@@ -388,6 +389,21 @@ export default function RoomPage({
   }, [applyRoomSnapshot, fetchRoomSnapshot, roomId, router]);
 
   const hasRoomLoaded = room !== null;
+
+  useEffect(() => {
+    if (!room?.scheduledStartAt) {
+      setIsPastScheduledTime(false);
+      return;
+    }
+
+    const checkTime = () => {
+      setIsPastScheduledTime(new Date(room.scheduledStartAt!).getTime() <= Date.now());
+    };
+
+    checkTime();
+    const interval = setInterval(checkTime, 10000);
+    return () => clearInterval(interval);
+  }, [room?.scheduledStartAt]);
 
   useEffect(() => {
     if (!hasRoomLoaded) {
@@ -617,9 +633,17 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        console.error("Failed to update attendance", res.status, text);
-        toast.error("Could not update attendance");
+        let errorMessage = "Could not update attendance";
+        try {
+          const body = await res.json();
+          if (body.message) {
+            errorMessage = body.message;
+          }
+        } catch (e) {
+          // fallback to generic
+        }
+        console.error("Failed to update attendance", res.status);
+        toast.error(errorMessage);
         return;
       }
 
@@ -627,28 +651,28 @@ export default function RoomPage({
       setRoom((prev) =>
         prev
           ? {
-              ...prev,
-              members: [
-                ...prev.members.filter(
-                  (member) => member.userId !== data.member.userId,
-                ),
-                data.member,
-              ],
-              isMember: true,
-            }
-          : prev,
-      );
-      roomRef.current = roomRef.current
-        ? {
-            ...roomRef.current,
+            ...prev,
             members: [
-              ...roomRef.current.members.filter(
+              ...prev.members.filter(
                 (member) => member.userId !== data.member.userId,
               ),
               data.member,
             ],
             isMember: true,
           }
+          : prev,
+      );
+      roomRef.current = roomRef.current
+        ? {
+          ...roomRef.current,
+          members: [
+            ...roomRef.current.members.filter(
+              (member) => member.userId !== data.member.userId,
+            ),
+            data.member,
+          ],
+          isMember: true,
+        }
         : roomRef.current;
       await fetchAttendees();
       toast.success("Attendance updated");
@@ -1278,7 +1302,7 @@ export default function RoomPage({
               </div>
             )}
 
-            {room.isScheduled && (
+            {room.isScheduled && !isPastScheduledTime && !activeVideoId && (
               <div className="border-t border-border/50 pt-4 dark:border-white/5">
                 <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -1507,11 +1531,10 @@ export default function RoomPage({
                   </div>
 
                   <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
-                      isAttendeesOpen
-                        ? "grid-rows-[1fr] opacity-100"
-                        : "grid-rows-[0fr] opacity-0"
-                    }`}
+                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${isAttendeesOpen
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0"
+                      }`}
                   >
                     <div className="overflow-hidden">
                       <div className="space-y-2 p-4">
@@ -1608,11 +1631,10 @@ export default function RoomPage({
                 </div>
 
                 <div
-                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out flex-1 min-h-0 ${
-                    isChatOpen
-                      ? "grid-rows-[1fr] opacity-100"
-                      : "grid-rows-[0fr] opacity-0"
-                  }`}
+                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out flex-1 min-h-0 ${isChatOpen
+                    ? "grid-rows-[1fr] opacity-100"
+                    : "grid-rows-[0fr] opacity-0"
+                    }`}
                   style={{ display: isChatOpen ? 'flex' : 'grid', flexDirection: 'column' }}
                 >
                   <div className={`flex flex-col overflow-hidden flex-1 ${!isChatOpen && 'invisible'}`}>

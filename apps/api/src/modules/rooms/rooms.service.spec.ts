@@ -38,7 +38,9 @@ class FakeRoomsRepository implements RoomsRepository {
   }
 
   listRooms(): Promise<Room[]> {
-    return Promise.resolve(Array.from(this.rooms.values()).map((room) => ({ ...room })));
+    return Promise.resolve(
+      Array.from(this.rooms.values()).map((room) => ({ ...room })),
+    );
   }
 
   getRoomById(roomId: string): Promise<Room | null> {
@@ -47,14 +49,16 @@ class FakeRoomsRepository implements RoomsRepository {
   }
 
   createMember(member: RoomMember): Promise<RoomMember> {
-    const roomMembers = this.members.get(member.roomId) ?? new Map<string, RoomMember>();
+    const roomMembers =
+      this.members.get(member.roomId) ?? new Map<string, RoomMember>();
     roomMembers.set(member.userId, { ...member });
     this.members.set(member.roomId, roomMembers);
     return Promise.resolve({ ...member });
   }
 
   joinMember(member: RoomMember): Promise<RoomMember> {
-    const roomMembers = this.members.get(member.roomId) ?? new Map<string, RoomMember>();
+    const roomMembers =
+      this.members.get(member.roomId) ?? new Map<string, RoomMember>();
     roomMembers.set(member.userId, { ...member });
     this.members.set(member.roomId, roomMembers);
     return Promise.resolve({ ...member });
@@ -417,7 +421,10 @@ test('host can update video on a scheduled private party without a password', as
     videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   });
 
-  assert.equal(response.videoUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(
+    response.videoUrl,
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  );
   assert.equal(
     repository.rooms.get('scheduled-private')?.videoUrl,
     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',

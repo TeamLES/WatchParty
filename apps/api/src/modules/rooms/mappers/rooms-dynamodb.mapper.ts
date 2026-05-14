@@ -80,8 +80,12 @@ export function toRoomItem(room: Room): RoomItem {
       ? { maxCapacity: room.maxCapacity }
       : {}),
     activeWatcherCount: room.activeWatcherCount,
-    ...(room.isScheduled !== undefined ? { isScheduled: room.isScheduled } : {}),
-    ...(room.scheduledStartAt ? { scheduledStartAt: room.scheduledStartAt } : {}),
+    ...(room.isScheduled !== undefined
+      ? { isScheduled: room.isScheduled }
+      : {}),
+    ...(room.scheduledStartAt
+      ? { scheduledStartAt: room.scheduledStartAt }
+      : {}),
     ...(room.reminderMinutesBefore !== undefined
       ? { reminderMinutesBefore: room.reminderMinutesBefore }
       : {}),

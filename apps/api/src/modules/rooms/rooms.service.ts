@@ -449,7 +449,9 @@ export class RoomsService {
     const room = await this.getRoomOrThrow(roomId);
 
     if (!room.isScheduled && !room.scheduledStartAt) {
-      throw new BadRequestException('RSVP is available only for scheduled rooms');
+      throw new BadRequestException(
+        'RSVP is available only for scheduled rooms',
+      );
     }
 
     const now = this.nowIsoString();
@@ -460,19 +462,30 @@ export class RoomsService {
       );
     }
 
-    const existingMember = await this.roomsRepository.getMember(roomId, user.sub);
+    const existingMember = await this.roomsRepository.getMember(
+      roomId,
+      user.sub,
+    );
     const member: RoomMember = {
       roomId,
       userId: user.sub,
-      role: existingMember?.role ?? (room.hostUserId === user.sub ? 'host' : 'viewer'),
+      role:
+        existingMember?.role ??
+        (room.hostUserId === user.sub ? 'host' : 'viewer'),
       joinedAt: existingMember?.joinedAt ?? now,
       ...(existingMember?.nickname
         ? { nickname: existingMember.nickname }
         : { nickname: this.getUserDisplayName(user) }),
-      ...(email ? { email } : existingMember?.email ? { email: existingMember.email } : {}),
+      ...(email
+        ? { email }
+        : existingMember?.email
+          ? { email: existingMember.email }
+          : {}),
       rsvpStatus: status,
       rsvpUpdatedAt: now,
-      ...(existingMember?.lastSeenAt ? { lastSeenAt: existingMember.lastSeenAt } : {}),
+      ...(existingMember?.lastSeenAt
+        ? { lastSeenAt: existingMember.lastSeenAt }
+        : {}),
       ...(existingMember?.reminderEmailSentAt
         ? { reminderEmailSentAt: existingMember.reminderEmailSentAt }
         : {}),
@@ -530,7 +543,9 @@ export class RoomsService {
 
     return {
       roomId,
-      attendees: members.map((member) => this.toRoomMemberResponse(member, true)),
+      attendees: members.map((member) =>
+        this.toRoomMemberResponse(member, true),
+      ),
     };
   }
 
@@ -799,7 +814,9 @@ export class RoomsService {
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException(`${fieldName} must be a valid ISO date-time`);
+      throw new BadRequestException(
+        `${fieldName} must be a valid ISO date-time`,
+      );
     }
 
     if (date.getTime() <= Date.now()) {
@@ -866,9 +883,7 @@ export class RoomsService {
       return members;
     }
 
-    return members.filter((member) =>
-      onlineUserIds.has(member.userId),
-    );
+    return members.filter((member) => onlineUserIds.has(member.userId));
   }
 
   private pickEligibleCoHost(

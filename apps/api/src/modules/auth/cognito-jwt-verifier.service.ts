@@ -29,9 +29,13 @@ export interface VerifiedCognitoIdToken {
 
 @Injectable()
 export class CognitoJwtVerifierService {
-  private readonly accessTokenVerifier: ReturnType<typeof CognitoJwtVerifier.create>;
+  private readonly accessTokenVerifier: ReturnType<
+    typeof CognitoJwtVerifier.create
+  >;
 
-  private readonly idTokenVerifier: ReturnType<typeof CognitoJwtVerifier.create>;
+  private readonly idTokenVerifier: ReturnType<
+    typeof CognitoJwtVerifier.create
+  >;
 
   private readonly expectedIssuer: string;
 

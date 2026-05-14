@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
@@ -14,7 +20,9 @@ const DEFAULT_INTERVAL_MS = 60_000;
 const CLAIM_STALE_AFTER_MS = 10 * 60_000;
 
 @Injectable()
-export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestroy {
+export class ScheduledPartyReminderWorker
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(ScheduledPartyReminderWorker.name);
   private timer: NodeJS.Timeout | null = null;
   private isRunning = false;
@@ -46,7 +54,9 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
 
     this.timer = setInterval(() => void this.runOnce(), intervalMs);
     void this.runOnce();
-    this.logger.log(`scheduled reminder polling enabled intervalMs=${intervalMs}`);
+    this.logger.log(
+      `scheduled reminder polling enabled intervalMs=${intervalMs}`,
+    );
   }
 
   onModuleDestroy(): void {
@@ -106,20 +116,35 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
       const goingMembers = members.filter(
         (member) => member.rsvpStatus === 'going',
       );
-      const host = members.find((member) => member.userId === claimedRoom.hostUserId);
+      const host = members.find(
+        (member) => member.userId === claimedRoom.hostUserId,
+      );
 
-      await Promise.all(
+      const results = await Promise.all(
         goingMembers.map((member) =>
           this.sendMemberReminder(claimedRoom, member, host),
         ),
       );
 
-      await this.roomsRepository.updateRoom({
-        ...claimedRoom,
-        reminderStatus: 'sent',
-        reminderSentAt: new Date().toISOString(),
-        reminderError: undefined,
-      });
+      const hasFailures = results.some((status) => status === 'failed');
+      const failedCount = results.filter(
+        (status) => status === 'failed',
+      ).length;
+
+      if (hasFailures) {
+        await this.roomsRepository.updateRoom({
+          ...claimedRoom,
+          reminderStatus: 'failed',
+          reminderError: `${failedCount} member email(s) failed`,
+        });
+      } else {
+        await this.roomsRepository.updateRoom({
+          ...claimedRoom,
+          reminderStatus: 'sent',
+          reminderSentAt: new Date().toISOString(),
+          reminderError: undefined,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.roomsRepository.updateRoom({
@@ -134,9 +159,9 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
     room: Room,
     member: RoomMember,
     host?: RoomMember,
-  ): Promise<void> {
+  ): Promise<'sent' | 'skipped' | 'failed'> {
     if (member.reminderEmailSentAt || member.reminderEmailStatus === 'sent') {
-      return;
+      return 'skipped';
     }
 
     if (!member.email) {
@@ -145,18 +170,24 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
         reminderEmailStatus: 'failed',
         reminderEmailError: 'Member has no email address',
       });
-      return;
+      return 'failed';
     }
 
     try {
-      await this.emailService.sendScheduledPartyReminderEmail({
+      const result = await this.emailService.sendScheduledPartyReminderEmail({
         to: member.email,
         displayName: member.nickname,
         partyTitle: room.scheduledTitle ?? room.title,
-        scheduledStartAt: room.scheduledStartAt ?? room.reminderAt ?? room.createdAt,
+        scheduledStartAt:
+          room.scheduledStartAt ?? room.reminderAt ?? room.createdAt,
         roomUrl: room.appRoomUrl ?? this.buildRoomUrl(room.roomId),
         hostName: host?.nickname,
       });
+
+      if (result.provider === 'dev-log' && !result.delivered) {
+        // Did not actually send an email (dev mode fallback)
+        return 'skipped';
+      }
 
       await this.roomsRepository.updateMember({
         ...member,
@@ -164,6 +195,7 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
         reminderEmailStatus: 'sent',
         reminderEmailError: undefined,
       });
+      return 'sent';
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.roomsRepository.updateMember({
@@ -171,13 +203,26 @@ export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestr
         reminderEmailStatus: 'failed',
         reminderEmailError: message.slice(0, 1000),
       });
+      return 'failed';
     }
   }
 
   private buildRoomUrl(roomId: string): string {
-    const baseUrl =
-      this.configService.get<string>('APP_BASE_URL')?.replace(/\/+$/g, '') ??
-      'http://localhost:3000';
+    const rawBaseUrl = this.configService.get<string>('APP_BASE_URL')?.trim();
+    let baseUrl = rawBaseUrl?.replace(/\/+$/g, '') ?? 'http://localhost:3000';
+
+    if (baseUrl.endsWith('/hub')) {
+      baseUrl = baseUrl.slice(0, -4);
+    }
+
+    if (
+      this.configService.get<string>('NODE_ENV') === 'production' &&
+      baseUrl.includes('localhost')
+    ) {
+      this.logger.warn(
+        `APP_BASE_URL contains localhost in production: ${baseUrl}`,
+      );
+    }
 
     return `${baseUrl}/room/${roomId}`;
   }
