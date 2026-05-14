@@ -30,6 +30,7 @@ import type {
   UpdateHighlightRequest,
   UpdateHighlightResponse,
 } from "@watchparty/shared-types";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +149,7 @@ export default function RoomPage({
   const socketPlayerRef = useRef<SyncedYouTubePlayerRef>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasLeftRoomRef = useRef(false);
+  const roomRef = useRef<GetRoomResponse | null>(null);
   const router = useRouter();
 
   const fetchRoomSnapshot = useCallback(async () => {
@@ -204,6 +206,74 @@ export default function RoomPage({
     return `User ${member.userId.slice(0, 8)}`;
   }, []);
 
+  const getMemberDisplayNameById = useCallback(
+    (userId: string) => {
+      const member = roomRef.current?.members.find(
+        (candidate) => candidate.userId === userId,
+      );
+
+      if (member) {
+        return formatMemberDisplayName(member);
+      }
+
+      if (userId.startsWith("guest-")) {
+        return `Guest ${userId.slice(-4)}`;
+      }
+
+      return `User ${userId.slice(0, 8)}`;
+    },
+    [formatMemberDisplayName],
+  );
+
+  const applyRoomSnapshot = useCallback(
+    (nextRoom: GetRoomResponse, options: { notify?: boolean } = {}) => {
+      const shouldNotify = options.notify ?? true;
+      const previousRoom = roomRef.current;
+
+      if (shouldNotify && previousRoom && currentUserId) {
+        const previousCurrentMember = previousRoom.members.find(
+          (member) => member.userId === currentUserId,
+        );
+        const nextCurrentMember = nextRoom.members.find(
+          (member) => member.userId === currentUserId,
+        );
+
+        if (
+          previousCurrentMember?.role !== "co-host" &&
+          nextCurrentMember?.role === "co-host"
+        ) {
+          toast.success("You are now Co-Host", {
+            description: "You can control playback and kick viewers.",
+          });
+        }
+
+        const previousHostWasPresent = previousRoom.members.some(
+          (member) => member.userId === previousRoom.hostUserId,
+        );
+        const nextHostIsPresent = nextRoom.members.some(
+          (member) => member.userId === nextRoom.hostUserId,
+        );
+
+        if (
+          previousHostWasPresent &&
+          !nextHostIsPresent &&
+          currentUserId !== nextRoom.hostUserId
+        ) {
+          toast.info("Host left the room", {
+            description:
+              nextRoom.isController || nextCurrentMember?.role === "co-host"
+                ? "You can keep playback moving."
+                : "A Co-Host can keep playback moving.",
+          });
+        }
+      }
+
+      roomRef.current = nextRoom;
+      setRoom(nextRoom);
+    },
+    [currentUserId],
+  );
+
   // Fetch initial room data and current user.
   useEffect(() => {
     async function fetchRoom() {
@@ -248,7 +318,7 @@ export default function RoomPage({
           roomData = await fetchRoomSnapshot();
         }
 
-        setRoom(roomData);
+        applyRoomSnapshot(roomData, { notify: false });
 
         setEditTitle(roomData.title);
 
@@ -263,7 +333,7 @@ export default function RoomPage({
       }
     }
     fetchRoom();
-  }, [fetchRoomSnapshot, roomId, router]);
+  }, [applyRoomSnapshot, fetchRoomSnapshot, roomId, router]);
 
   const hasRoomLoaded = room !== null;
 
@@ -325,7 +395,7 @@ export default function RoomPage({
           }
 
           const reactivatedRoom = await fetchRoomSnapshot();
-          setRoom(reactivatedRoom);
+          applyRoomSnapshot(reactivatedRoom, { notify: false });
           if (reactivatedRoom.videoUrl) {
             setVideoUrl(reactivatedRoom.videoUrl);
             setActiveVideoId(extractYoutubeId(reactivatedRoom.videoUrl));
@@ -333,7 +403,7 @@ export default function RoomPage({
           return;
         }
 
-        setRoom(latestRoom);
+        applyRoomSnapshot(latestRoom);
 
         if (latestRoom.videoUrl) {
           setVideoUrl(latestRoom.videoUrl);
@@ -351,7 +421,7 @@ export default function RoomPage({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [fetchRoomSnapshot, hasRoomLoaded, roomId, router]);
+  }, [applyRoomSnapshot, fetchRoomSnapshot, hasRoomLoaded, roomId, router]);
 
   const shouldTrackLeave = room?.isMember === true;
 
@@ -392,13 +462,13 @@ export default function RoomPage({
 
   const handlePlay = async () => {
     if (!room?.isHost) {
-      alert("Only the host can change the video!");
+      toast.error("Only the Host can change the video");
       return;
     }
 
     const id = extractYoutubeId(videoUrl);
     if (!id) {
-      alert("Please enter a valid YouTube URL.");
+      toast.warning("Paste a valid YouTube URL");
       return;
     }
 
@@ -413,15 +483,17 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Nepodarilo sa updatnúť videoUrl");
+        toast.error("Could not update the room video");
         return;
       }
 
       // Aktulizacia prebehla uspesne
       setActiveVideoId(id);
       setStartPlaybackSignal((value) => value + 1);
+      toast.success("Video started for everyone");
     } catch (err) {
       console.error(err);
-      alert("Chyba pri zmene videa. Skontroluj konzolu.");
+      toast.error("Could not change the video");
     } finally {
       setIsUpdatingVideo(false);
     }
@@ -495,23 +567,23 @@ export default function RoomPage({
 
   const handleRoomRoleUpdated = useCallback(
     (event: RoomRoleUpdatedEvent) => {
-      setRoom((prevRoom) => {
-        if (!prevRoom || prevRoom.roomId !== event.roomId) {
-          return prevRoom;
-        }
+      const previousRoom = roomRef.current;
 
-        const isCoHost = currentUserId === event.coHostUserId;
+      if (!previousRoom || previousRoom.roomId !== event.roomId) {
+        return;
+      }
 
-        return {
-          ...prevRoom,
-          coHostUserId: event.coHostUserId,
-          members: event.members,
-          isCoHost,
-          isController: prevRoom.isHost || isCoHost,
-        };
+      const isCoHost = currentUserId === event.coHostUserId;
+
+      applyRoomSnapshot({
+        ...previousRoom,
+        coHostUserId: event.coHostUserId,
+        members: event.members,
+        isCoHost,
+        isController: previousRoom.isHost || isCoHost,
       });
     },
-    [currentUserId],
+    [applyRoomSnapshot, currentUserId],
   );
 
   useEffect(() => {
@@ -544,7 +616,9 @@ export default function RoomPage({
 
       setShowInviteModal(true);
     } catch {
-      alert(`Copy failed. Use this link manually: ${joinUrl}`);
+      toast.error("Could not copy invite link", {
+        description: "The invite link is still visible in the dialog.",
+      });
     }
   };
 
@@ -559,13 +633,15 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Nepodarilo sa zmazať roomku.");
+        toast.error("Could not delete the room");
         return;
       }
 
+      toast.success("Room deleted");
       router.push("/hub");
     } catch (err) {
       console.error(err);
-      alert("Chyba pri mazaní miestnosti.");
+      toast.error("Could not delete the room");
       setIsDeleting(false);
       setShowDeleteModal(false);
     }
@@ -612,6 +688,7 @@ export default function RoomPage({
       highlightCapturePositionMs ?? readCurrentPlaybackPositionMs();
 
     if (!activeVideoId || currentPositionMs <= 0) {
+      toast.warning("Start the video before saving a highlight");
       return;
     }
 
@@ -636,13 +713,16 @@ export default function RoomPage({
       if (!res.ok) {
         const errorText = await res.text();
         console.error("Failed to create highlight", res.status, errorText);
-        alert(`Failed to save highlight: ${res.statusText}`);
+        toast.error("Could not save highlight", {
+          description: res.statusText,
+        });
         return;
       }
 
       const created = (await res.json()) as CreateHighlightResponse;
       setHighlights((prev) => [created.highlight, ...prev]);
       setIsHighlightSaved(true);
+      toast.success("Highlight saved");
       window.setTimeout(() => {
         setIsHighlightSaved(false);
         setShowHighlightRecorderModal(false);
@@ -651,7 +731,7 @@ export default function RoomPage({
       void fetchHighlights({ showLoading: false });
     } catch (error) {
       console.error(error);
-      alert("Unable to save a highlight right now.");
+      toast.error("Could not save highlight");
     } finally {
       setIsCreatingHighlight(false);
     }
@@ -700,6 +780,7 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Failed to update highlight");
+        toast.error("Could not update highlight");
         return;
       }
 
@@ -714,9 +795,10 @@ export default function RoomPage({
       setEditingHighlight(null);
       setHighlightEditTitle("");
       setHighlightEditNote("");
+      toast.success("Highlight updated");
     } catch (error) {
       console.error(error);
-      alert("Unable to update this highlight right now.");
+      toast.error("Could not update highlight");
     } finally {
       setIsSavingHighlightEdit(false);
     }
@@ -757,16 +839,18 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Failed to delete highlight");
+        toast.error("Could not delete highlight");
         return;
       }
 
       setHighlights((prev) =>
         prev.filter((highlight) => highlight.highlightId !== highlightId),
       );
+      toast.success("Highlight deleted");
       void fetchHighlights({ showLoading: false });
     } catch (error) {
       console.error(error);
-      alert("Unable to delete this highlight right now.");
+      toast.error("Could not delete highlight");
     } finally {
       setDeletingHighlightId(null);
     }
@@ -788,24 +872,28 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Failed to update room title");
+        toast.error("Could not update room settings");
         return;
       }
 
       const updatedRoom = (await res.json()) as GetRoomResponse;
-      setRoom(updatedRoom);
+      applyRoomSnapshot(updatedRoom, { notify: false });
       setEditTitle(updatedRoom.title);
       setShowSettingsModal(false);
+      toast.success("Room settings updated");
     } catch (err) {
       console.error(err);
-      alert("Error updating room settings.");
+      toast.error("Could not update room settings");
     }
   };
 
   const handleKickMember = async (memberUserId: string) => {
     if (!room?.isController) {
+      toast.error("You cannot kick members");
       return;
     }
 
+    const memberName = getMemberDisplayNameById(memberUserId);
     setKickingMemberId(memberUserId);
 
     try {
@@ -819,14 +907,16 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Failed to kick member");
+        toast.error(`Could not kick ${memberName}`);
         return;
       }
 
       const latestRoom = await fetchRoomSnapshot();
-      setRoom(latestRoom);
+      applyRoomSnapshot(latestRoom);
+      toast.success(`${memberName} was kicked`);
     } catch (error) {
       console.error(error);
-      alert("Unable to kick this member right now.");
+      toast.error(`Could not kick ${memberName}`);
     } finally {
       setKickingMemberId(null);
     }
@@ -834,9 +924,13 @@ export default function RoomPage({
 
   const handleSetCoHost = async (memberUserId?: string) => {
     if (!room?.isHost) {
+      toast.error("Only the Host can choose a Co-Host");
       return;
     }
 
+    const targetName = memberUserId
+      ? getMemberDisplayNameById(memberUserId)
+      : "a random member";
     setSettingCoHostUserId(memberUserId ?? "random");
 
     try {
@@ -850,14 +944,23 @@ export default function RoomPage({
 
       if (!res.ok) {
         console.error("Failed to set co-host");
+        toast.error("Could not update the Co-Host");
         return;
       }
 
       const latestRoom = (await res.json()) as GetRoomResponse;
-      setRoom(latestRoom);
+      applyRoomSnapshot(latestRoom);
+      const coHostName = latestRoom.coHostUserId
+        ? getMemberDisplayNameById(latestRoom.coHostUserId)
+        : targetName;
+      toast.success("Co-Host updated", {
+        description: latestRoom.coHostUserId
+          ? `${coHostName} can now control playback.`
+          : "No eligible member was available.",
+      });
     } catch (error) {
       console.error(error);
-      alert("Unable to update the co-host right now.");
+      toast.error("Could not update the Co-Host");
     } finally {
       setSettingCoHostUserId(null);
     }
