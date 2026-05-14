@@ -1,4 +1,6 @@
 export type RoomMemberRole = 'host' | 'co-host' | 'viewer';
+export type RoomMemberRsvpStatus = 'going' | 'not_going' | 'maybe' | 'none';
+export type RoomMemberReminderEmailStatus = 'sent' | 'failed';
 
 export interface RoomMember {
   roomId: string;
@@ -7,4 +9,10 @@ export interface RoomMember {
   joinedAt: string;
   lastSeenAt?: string;
   nickname?: string;
+  email?: string;
+  rsvpStatus?: RoomMemberRsvpStatus;
+  rsvpUpdatedAt?: string;
+  reminderEmailSentAt?: string;
+  reminderEmailStatus?: RoomMemberReminderEmailStatus;
+  reminderEmailError?: string;
 }

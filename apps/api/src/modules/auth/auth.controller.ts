@@ -38,6 +38,7 @@ export class AuthController {
     return {
       sub: user.sub,
       username: typeof user.username === 'string' ? user.username : undefined,
+      email: typeof user.email === 'string' ? user.email : undefined,
       scope: typeof user.scope === 'string' ? user.scope : undefined,
       clientId: typeof user.client_id === 'string' ? user.client_id : undefined,
       tokenUse: user.token_use,

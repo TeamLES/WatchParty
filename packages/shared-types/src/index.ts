@@ -14,14 +14,20 @@ export type {
 export type {
   CreateRoomInviteResponse,
   CreateRoomResponse,
+  CreateScheduledRoomResponse,
+  GetRoomAttendeesResponse,
   GetRoomMembersResponse,
   GetRoomResponse,
   GetRoomsResponse,
   JoinRoomResponse,
+  RsvpRoomResponse,
+  RoomMemberReminderEmailStatus,
   RoomMemberResponse,
   RoomMemberRole,
+  RoomMemberRsvpStatus,
   RoomStatus,
   RoomSummaryResponse,
+  ScheduledReminderStatus,
 } from "./rooms.js";
 
 export type {

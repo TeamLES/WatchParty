@@ -28,19 +28,24 @@ import {
 import type {
   CreateRoomInviteResponse,
   CreateRoomResponse,
+  CreateScheduledRoomResponse,
+  GetRoomAttendeesResponse,
   GetRoomMembersResponse,
   GetRoomResponse,
   GetRoomsResponse,
   JoinRoomResponse,
+  RsvpRoomResponse,
 } from '@watchparty/shared-types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CognitoAuthGuard } from '../../common/guards/cognito-auth.guard';
 import type { VerifiedCognitoAccessToken } from '../auth/cognito-jwt-verifier.service';
 import { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { CreateScheduledRoomDto } from './dto/create-scheduled-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { KickRoomMemberDto } from './dto/kick-room-member.dto';
 import { RoomIdParamDto } from './dto/room-id-param.dto';
+import { RsvpRoomDto } from './dto/rsvp-room.dto';
 import { SetRoomCoHostDto } from './dto/set-room-co-host.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
@@ -78,6 +83,32 @@ export class RoomsController {
   ): Promise<CreateRoomResponse> {
     const userId = this.getRequiredUserSub(user);
     return this.roomsService.createRoom(userId, createRoomDto);
+  }
+
+  @Post('scheduled')
+  @ApiOperation({ summary: 'Create a scheduled watch party' })
+  @ApiBody({ type: CreateScheduledRoomDto })
+  @ApiCreatedResponse({ description: 'Scheduled room created' })
+  @ApiBadRequestResponse({ description: 'Invalid scheduled room payload' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  async createScheduledRoom(
+    @Body() createScheduledRoomDto: CreateScheduledRoomDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<CreateScheduledRoomResponse> {
+    return this.roomsService.createScheduledRoom(
+      this.getRequiredUser(user),
+      createScheduledRoomDto,
+    );
+  }
+
+  @Get('scheduled/mine')
+  @ApiOperation({ summary: 'Get scheduled parties for the current user' })
+  @ApiOkResponse({ description: 'Scheduled rooms listed' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  async getMyScheduledRooms(
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<GetRoomsResponse> {
+    return this.roomsService.getMyScheduledRooms(this.getRequiredUserSub(user));
   }
 
   @Patch(':roomId')
@@ -170,6 +201,42 @@ export class RoomsController {
     return { message: 'Left room successfully' };
   }
 
+  @Post(':roomId/rsvp')
+  @ApiOperation({ summary: 'Set RSVP for a scheduled room' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiBody({ type: RsvpRoomDto })
+  @ApiOkResponse({ description: 'RSVP updated' })
+  @ApiBadRequestResponse({ description: 'Invalid roomId or RSVP payload' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Room not found' })
+  async rsvpRoom(
+    @Param() params: RoomIdParamDto,
+    @Body() rsvpRoomDto: RsvpRoomDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<RsvpRoomResponse> {
+    return this.roomsService.setRsvp(
+      params.roomId,
+      this.getRequiredUser(user),
+      rsvpRoomDto.status,
+    );
+  }
+
+  @Get(':roomId/attendees')
+  @ApiOperation({ summary: 'Get scheduled room attendees' })
+  @ApiParam({ name: 'roomId', type: String })
+  @ApiOkResponse({ description: 'Attendees listed' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid bearer token' })
+  @ApiNotFoundResponse({ description: 'Room not found' })
+  async getRoomAttendees(
+    @Param() params: RoomIdParamDto,
+    @CurrentUser() user: VerifiedCognitoAccessToken | null,
+  ): Promise<GetRoomAttendeesResponse> {
+    return this.roomsService.getRoomAttendees(
+      params.roomId,
+      this.getRequiredUserSub(user),
+    );
+  }
+
   @Post(':roomId/kick')
   @ApiOperation({ summary: 'Kick a member from room (host only)' })
   @ApiParam({ name: 'roomId', type: String })
@@ -260,6 +327,13 @@ export class RoomsController {
     }
 
     return user.sub;
+  }
+
+  private getRequiredUser(
+    user: VerifiedCognitoAccessToken | null,
+  ): VerifiedCognitoAccessToken {
+    this.getRequiredUserSub(user);
+    return user as VerifiedCognitoAccessToken;
   }
 
   private getUserDisplayName(

@@ -1,0 +1,184 @@
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
+import type { RoomMember } from './entities/room-member.entity';
+import type { Room } from './entities/room.entity';
+import {
+  ReminderClaimConflictError,
+  type RoomsRepository,
+} from './repositories/rooms.repository';
+import { ScheduledPartyEmailService } from './scheduled-party-email.service';
+
+const DEFAULT_INTERVAL_MS = 60_000;
+const CLAIM_STALE_AFTER_MS = 10 * 60_000;
+
+@Injectable()
+export class ScheduledPartyReminderWorker implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ScheduledPartyReminderWorker.name);
+  private timer: NodeJS.Timeout | null = null;
+  private isRunning = false;
+
+  constructor(
+    @Inject(ROOMS_REPOSITORY)
+    private readonly roomsRepository: RoomsRepository,
+    private readonly emailService: ScheduledPartyEmailService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  onModuleInit(): void {
+    const enabled =
+      this.configService.get<string>('SCHEDULE_REMINDER_POLL_ENABLED') !==
+      'false';
+
+    if (!enabled) {
+      this.logger.log('scheduled reminder polling disabled');
+      return;
+    }
+
+    const intervalMs = Math.max(
+      Number(
+        this.configService.get<string>('SCHEDULE_REMINDER_INTERVAL_MS') ??
+          DEFAULT_INTERVAL_MS,
+      ),
+      5_000,
+    );
+
+    this.timer = setInterval(() => void this.runOnce(), intervalMs);
+    void this.runOnce();
+    this.logger.log(`scheduled reminder polling enabled intervalMs=${intervalMs}`);
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  async runOnce(): Promise<void> {
+    if (this.isRunning) {
+      return;
+    }
+
+    this.isRunning = true;
+
+    try {
+      const nowIso = new Date().toISOString();
+      const dueRooms =
+        await this.roomsRepository.listDueScheduledReminderRooms(nowIso);
+
+      for (const room of dueRooms) {
+        await this.processRoom(room);
+      }
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  private async processRoom(room: Room): Promise<void> {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const staleBeforeIso = new Date(
+      now.getTime() - CLAIM_STALE_AFTER_MS,
+    ).toISOString();
+
+    let claimedRoom: Room;
+
+    try {
+      claimedRoom = await this.roomsRepository.claimScheduledReminder(
+        room.roomId,
+        nowIso,
+        staleBeforeIso,
+      );
+    } catch (error) {
+      if (error instanceof ReminderClaimConflictError) {
+        return;
+      }
+
+      throw error;
+    }
+
+    try {
+      const members = await this.roomsRepository.getMembersByRoomId(
+        claimedRoom.roomId,
+      );
+      const goingMembers = members.filter(
+        (member) => member.rsvpStatus === 'going',
+      );
+      const host = members.find((member) => member.userId === claimedRoom.hostUserId);
+
+      await Promise.all(
+        goingMembers.map((member) =>
+          this.sendMemberReminder(claimedRoom, member, host),
+        ),
+      );
+
+      await this.roomsRepository.updateRoom({
+        ...claimedRoom,
+        reminderStatus: 'sent',
+        reminderSentAt: new Date().toISOString(),
+        reminderError: undefined,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.roomsRepository.updateRoom({
+        ...claimedRoom,
+        reminderStatus: 'failed',
+        reminderError: message.slice(0, 1000),
+      });
+    }
+  }
+
+  private async sendMemberReminder(
+    room: Room,
+    member: RoomMember,
+    host?: RoomMember,
+  ): Promise<void> {
+    if (member.reminderEmailSentAt || member.reminderEmailStatus === 'sent') {
+      return;
+    }
+
+    if (!member.email) {
+      await this.roomsRepository.updateMember({
+        ...member,
+        reminderEmailStatus: 'failed',
+        reminderEmailError: 'Member has no email address',
+      });
+      return;
+    }
+
+    try {
+      await this.emailService.sendScheduledPartyReminderEmail({
+        to: member.email,
+        displayName: member.nickname,
+        partyTitle: room.scheduledTitle ?? room.title,
+        scheduledStartAt: room.scheduledStartAt ?? room.reminderAt ?? room.createdAt,
+        roomUrl: room.appRoomUrl ?? this.buildRoomUrl(room.roomId),
+        hostName: host?.nickname,
+      });
+
+      await this.roomsRepository.updateMember({
+        ...member,
+        reminderEmailSentAt: new Date().toISOString(),
+        reminderEmailStatus: 'sent',
+        reminderEmailError: undefined,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.roomsRepository.updateMember({
+        ...member,
+        reminderEmailStatus: 'failed',
+        reminderEmailError: message.slice(0, 1000),
+      });
+    }
+  }
+
+  private buildRoomUrl(roomId: string): string {
+    const baseUrl =
+      this.configService.get<string>('APP_BASE_URL')?.replace(/\/+$/g, '') ??
+      'http://localhost:3000';
+
+    return `${baseUrl}/room/${roomId}`;
+  }
+}

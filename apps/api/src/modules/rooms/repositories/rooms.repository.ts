@@ -29,6 +29,12 @@ export class RoomMutationTargetMissingError extends Error {
   }
 }
 
+export class ReminderClaimConflictError extends Error {
+  constructor(public readonly roomId: string) {
+    super(`Reminder for room ${roomId} is already claimed or sent`);
+  }
+}
+
 export interface RoomsRepository {
   createRoom(room: Room): Promise<Room>;
   updateRoom(room: Room): Promise<Room>;
@@ -38,8 +44,10 @@ export interface RoomsRepository {
   // Room lookup must be scoped only by roomId, never by current user.
   getRoomById(roomId: string): Promise<Room | null>;
 
+  createMember(member: RoomMember): Promise<RoomMember>;
   joinMember(member: RoomMember): Promise<RoomMember>;
   getMember(roomId: string, userId: string): Promise<RoomMember | null>;
+  updateMember(member: RoomMember): Promise<RoomMember | null>;
   updateMemberRole(
     roomId: string,
     userId: string,
@@ -49,6 +57,12 @@ export interface RoomsRepository {
 
   // Members lookup is scoped by roomId in the room-members table.
   getMembersByRoomId(roomId: string): Promise<RoomMember[]>;
+  listDueScheduledReminderRooms(nowIso: string): Promise<Room[]>;
+  claimScheduledReminder(
+    roomId: string,
+    nowIso: string,
+    staleBeforeIso: string,
+  ): Promise<Room>;
   createInvite(invite: RoomInvite): Promise<RoomInvite>;
   getInviteByCode(inviteCode: string): Promise<RoomInvite | null>;
 }

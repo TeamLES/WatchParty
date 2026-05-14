@@ -8,13 +8,18 @@ import {
   UsersRoundIcon,
   SearchIcon,
   MonitorPlayIcon,
+  CalendarClockIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { RoomSummaryResponse } from "@watchparty/shared-types";
+import type {
+  CreateScheduledRoomResponse,
+  RoomSummaryResponse,
+} from "@watchparty/shared-types";
 import { extractYoutubeId } from "@/lib/youtube";
 
 type RoomActivityFilter = "all" | "active" | "empty";
@@ -92,6 +97,12 @@ export default function HubPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activityFilter, setActivityFilter] =
     useState<RoomActivityFilter>("all");
+  const [scheduleTitle, setScheduleTitle] = useState("");
+  const [scheduleDescription, setScheduleDescription] = useState("");
+  const [scheduleVideoUrl, setScheduleVideoUrl] = useState("");
+  const [scheduleDateTime, setScheduleDateTime] = useState("");
+  const [scheduleReminderMinutes, setScheduleReminderMinutes] = useState("30");
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const searchedRooms = rooms.filter((room) =>
     room.title.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -191,6 +202,55 @@ export default function HubPage() {
     }
   };
 
+  const handleScheduleRoom = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const startAt = new Date(scheduleDateTime);
+    if (!scheduleTitle.trim() || Number.isNaN(startAt.getTime())) {
+      toast.warning("Add a title and start time");
+      return;
+    }
+
+    setIsScheduling(true);
+
+    try {
+      const response = await fetch("/api/rooms/scheduled", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: scheduleTitle.trim(),
+          description: scheduleDescription.trim() || undefined,
+          videoUrl: scheduleVideoUrl.trim() || undefined,
+          scheduledStartAt: startAt.toISOString(),
+          reminderMinutesBefore: Number(scheduleReminderMinutes) || 30,
+          visibility: "private",
+          scheduledTimezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        console.error("Failed to schedule room", response.status, message);
+        toast.error("Could not schedule party");
+        return;
+      }
+
+      const data = (await response.json()) as CreateScheduledRoomResponse;
+      toast.success("Party scheduled", {
+        description: "Share the room link with your guests.",
+      });
+      router.push(`/room/${data.roomId}`);
+    } catch (error) {
+      console.error("Failed to schedule room", error);
+      toast.error("Could not schedule party");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
   return (
     <main className="page-surface min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(192,132,252,0.12),transparent_48%)] font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_0%,rgba(168,85,247,0.22),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(139,92,246,0.18),transparent_40%),radial-gradient(circle_at_50%_100%,rgba(192,132,252,0.16),transparent_50%)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 p-4 pb-20 sm:p-8">
@@ -287,6 +347,72 @@ export default function HubPage() {
             >
               {isSubmitting ? "Launching..." : "Launch"}
             </Button>
+          </form>
+        </section>
+
+        <section className="glass-card panel-surface rounded-3xl p-6 shadow-lg">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <CalendarClockIcon className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                Schedule a Party
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Plan ahead and send reminders to guests who RSVP.
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleScheduleRoom}
+            className="grid gap-3 md:grid-cols-[1.4fr_1fr_0.6fr_auto]"
+          >
+            <Input
+              value={scheduleTitle}
+              onChange={(event) => setScheduleTitle(event.target.value)}
+              placeholder="Movie night"
+              required
+              className="h-11 rounded-xl"
+            />
+            <Input
+              type="datetime-local"
+              value={scheduleDateTime}
+              onChange={(event) => setScheduleDateTime(event.target.value)}
+              required
+              className="h-11 rounded-xl"
+            />
+            <Input
+              type="number"
+              min={1}
+              max={1440}
+              value={scheduleReminderMinutes}
+              onChange={(event) =>
+                setScheduleReminderMinutes(event.target.value)
+              }
+              className="h-11 rounded-xl"
+              aria-label="Reminder minutes before start"
+            />
+            <Button
+              type="submit"
+              disabled={isScheduling || !scheduleTitle.trim()}
+              className="h-11 rounded-xl px-5"
+            >
+              {isScheduling ? "Scheduling..." : "Schedule Party"}
+            </Button>
+            <Input
+              value={scheduleVideoUrl}
+              onChange={(event) => setScheduleVideoUrl(event.target.value)}
+              placeholder="Optional YouTube URL"
+              className="h-11 rounded-xl md:col-span-2"
+            />
+            <Input
+              value={scheduleDescription}
+              onChange={(event) => setScheduleDescription(event.target.value)}
+              placeholder="Optional description"
+              className="h-11 rounded-xl md:col-span-2"
+            />
           </form>
         </section>
 

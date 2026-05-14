@@ -16,6 +16,18 @@ export interface RoomItem {
   visibilityStatus?: 'public' | 'private';
   maxCapacity?: number | null;
   activeWatcherCount: number;
+  isScheduled?: boolean;
+  scheduledStartAt?: string;
+  reminderMinutesBefore?: number;
+  reminderAt?: string;
+  reminderSentAt?: string;
+  reminderStatus?: 'pending' | 'sending' | 'sent' | 'failed';
+  reminderClaimedAt?: string;
+  reminderError?: string;
+  scheduledTitle?: string;
+  scheduledDescription?: string;
+  scheduledTimezone?: string;
+  appRoomUrl?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -27,6 +39,12 @@ export interface RoomMemberItem {
   joinedAt: string;
   lastSeenAt?: string;
   nickname?: string;
+  email?: string;
+  rsvpStatus?: 'going' | 'not_going' | 'maybe' | 'none';
+  rsvpUpdatedAt?: string;
+  reminderEmailSentAt?: string;
+  reminderEmailStatus?: 'sent' | 'failed';
+  reminderEmailError?: string;
 }
 
 export interface RoomInviteItem {
@@ -62,6 +80,26 @@ export function toRoomItem(room: Room): RoomItem {
       ? { maxCapacity: room.maxCapacity }
       : {}),
     activeWatcherCount: room.activeWatcherCount,
+    ...(room.isScheduled !== undefined ? { isScheduled: room.isScheduled } : {}),
+    ...(room.scheduledStartAt ? { scheduledStartAt: room.scheduledStartAt } : {}),
+    ...(room.reminderMinutesBefore !== undefined
+      ? { reminderMinutesBefore: room.reminderMinutesBefore }
+      : {}),
+    ...(room.reminderAt ? { reminderAt: room.reminderAt } : {}),
+    ...(room.reminderSentAt ? { reminderSentAt: room.reminderSentAt } : {}),
+    ...(room.reminderStatus ? { reminderStatus: room.reminderStatus } : {}),
+    ...(room.reminderClaimedAt
+      ? { reminderClaimedAt: room.reminderClaimedAt }
+      : {}),
+    ...(room.reminderError ? { reminderError: room.reminderError } : {}),
+    ...(room.scheduledTitle ? { scheduledTitle: room.scheduledTitle } : {}),
+    ...(room.scheduledDescription
+      ? { scheduledDescription: room.scheduledDescription }
+      : {}),
+    ...(room.scheduledTimezone
+      ? { scheduledTimezone: room.scheduledTimezone }
+      : {}),
+    ...(room.appRoomUrl ? { appRoomUrl: room.appRoomUrl } : {}),
     createdAt: room.createdAt,
     ...(room.updatedAt ? { updatedAt: room.updatedAt } : {}),
   };
@@ -75,6 +113,18 @@ export function toRoomMemberItem(member: RoomMember): RoomMemberItem {
     joinedAt: member.joinedAt,
     ...(member.lastSeenAt ? { lastSeenAt: member.lastSeenAt } : {}),
     ...(member.nickname ? { nickname: member.nickname } : {}),
+    ...(member.email ? { email: member.email } : {}),
+    ...(member.rsvpStatus ? { rsvpStatus: member.rsvpStatus } : {}),
+    ...(member.rsvpUpdatedAt ? { rsvpUpdatedAt: member.rsvpUpdatedAt } : {}),
+    ...(member.reminderEmailSentAt
+      ? { reminderEmailSentAt: member.reminderEmailSentAt }
+      : {}),
+    ...(member.reminderEmailStatus
+      ? { reminderEmailStatus: member.reminderEmailStatus }
+      : {}),
+    ...(member.reminderEmailError
+      ? { reminderEmailError: member.reminderEmailError }
+      : {}),
   };
 }
 
@@ -106,6 +156,18 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
   const coHostUserId = readNullableString(item.coHostUserId);
   const maxCapacity = readNullableNumber(item.maxCapacity);
   const activeWatcherCount = readNullableNumber(item.activeWatcherCount) ?? 0;
+  const isScheduled = readBoolean(item.isScheduled) ?? false;
+  const scheduledStartAt = readNullableString(item.scheduledStartAt);
+  const reminderMinutesBefore = readNullableNumber(item.reminderMinutesBefore);
+  const reminderAt = readNullableString(item.reminderAt);
+  const reminderSentAt = readNullableString(item.reminderSentAt);
+  const reminderStatusRaw = readNullableString(item.reminderStatus);
+  const reminderClaimedAt = readNullableString(item.reminderClaimedAt);
+  const reminderError = readNullableString(item.reminderError);
+  const scheduledTitle = readNullableString(item.scheduledTitle);
+  const scheduledDescription = readNullableString(item.scheduledDescription);
+  const scheduledTimezone = readNullableString(item.scheduledTimezone);
+  const appRoomUrl = readNullableString(item.appRoomUrl);
   const createdAt = readString(item.createdAt);
   const updatedAt = readNullableString(item.updatedAt);
   const visibilityStatusRaw = readNullableString(item.visibilityStatus);
@@ -117,6 +179,13 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
   const visibilityStatus =
     visibilityStatusRaw === 'public' || visibilityStatusRaw === 'private'
       ? visibilityStatusRaw
+      : undefined;
+  const reminderStatus =
+    reminderStatusRaw === 'pending' ||
+    reminderStatusRaw === 'sending' ||
+    reminderStatusRaw === 'sent' ||
+    reminderStatusRaw === 'failed'
+      ? reminderStatusRaw
       : undefined;
 
   if (isPrivate && !password) {
@@ -136,6 +205,18 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
     ...(coHostUserId ? { coHostUserId } : {}),
     ...(maxCapacity !== null ? { maxCapacity } : {}),
     activeWatcherCount,
+    ...(isScheduled ? { isScheduled } : {}),
+    ...(scheduledStartAt ? { scheduledStartAt } : {}),
+    ...(reminderMinutesBefore !== null ? { reminderMinutesBefore } : {}),
+    ...(reminderAt ? { reminderAt } : {}),
+    ...(reminderSentAt ? { reminderSentAt } : {}),
+    ...(reminderStatus ? { reminderStatus } : {}),
+    ...(reminderClaimedAt ? { reminderClaimedAt } : {}),
+    ...(reminderError ? { reminderError } : {}),
+    ...(scheduledTitle ? { scheduledTitle } : {}),
+    ...(scheduledDescription ? { scheduledDescription } : {}),
+    ...(scheduledTimezone ? { scheduledTimezone } : {}),
+    ...(appRoomUrl ? { appRoomUrl } : {}),
     status: 'active',
     createdAt,
     ...(updatedAt ? { updatedAt } : {}),
@@ -155,6 +236,12 @@ export function fromRoomMemberItem(
   const joinedAt = readString(item.joinedAt);
   const lastSeenAt = readNullableString(item.lastSeenAt);
   const nickname = readNullableString(item.nickname);
+  const email = readNullableString(item.email);
+  const rsvpStatusRaw = readNullableString(item.rsvpStatus);
+  const rsvpUpdatedAt = readNullableString(item.rsvpUpdatedAt);
+  const reminderEmailSentAt = readNullableString(item.reminderEmailSentAt);
+  const reminderEmailStatusRaw = readNullableString(item.reminderEmailStatus);
+  const reminderEmailError = readNullableString(item.reminderEmailError);
 
   if (!roomId || !userId || !joinedAt) {
     return null;
@@ -163,6 +250,17 @@ export function fromRoomMemberItem(
   if (roleRaw !== 'host' && roleRaw !== 'co-host' && roleRaw !== 'viewer') {
     return null;
   }
+  const rsvpStatus =
+    rsvpStatusRaw === 'going' ||
+    rsvpStatusRaw === 'not_going' ||
+    rsvpStatusRaw === 'maybe' ||
+    rsvpStatusRaw === 'none'
+      ? rsvpStatusRaw
+      : undefined;
+  const reminderEmailStatus =
+    reminderEmailStatusRaw === 'sent' || reminderEmailStatusRaw === 'failed'
+      ? reminderEmailStatusRaw
+      : undefined;
 
   return {
     roomId,
@@ -171,6 +269,12 @@ export function fromRoomMemberItem(
     joinedAt,
     ...(lastSeenAt ? { lastSeenAt } : {}),
     ...(nickname ? { nickname } : {}),
+    ...(email ? { email } : {}),
+    ...(rsvpStatus ? { rsvpStatus } : {}),
+    ...(rsvpUpdatedAt ? { rsvpUpdatedAt } : {}),
+    ...(reminderEmailSentAt ? { reminderEmailSentAt } : {}),
+    ...(reminderEmailStatus ? { reminderEmailStatus } : {}),
+    ...(reminderEmailError ? { reminderEmailError } : {}),
   };
 }
 

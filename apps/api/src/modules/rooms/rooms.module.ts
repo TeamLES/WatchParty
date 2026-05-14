@@ -16,12 +16,16 @@ import { DynamoDBRoomsRepository } from './repositories/dynamodb-rooms.repositor
 import { InMemoryRoomsRepository } from './repositories/in-memory-rooms.repository';
 import type { RoomsRepository } from './repositories/rooms.repository';
 import { RoomsService } from './rooms.service';
+import { ScheduledPartyEmailService } from './scheduled-party-email.service';
+import { ScheduledPartyReminderWorker } from './scheduled-party-reminder.worker';
 
 @Module({
   imports: [ConfigModule, AuthModule],
   controllers: [RoomsController],
   providers: [
     RoomsService,
+    ScheduledPartyEmailService,
+    ScheduledPartyReminderWorker,
     RealtimePresenceService,
     InMemoryRoomsRepository,
     DynamoDBRoomsRepository,

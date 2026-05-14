@@ -8,6 +8,7 @@ import {
   RoomCapacityExceededError,
   RoomMemberAlreadyExistsError,
   RoomMutationTargetMissingError,
+  ReminderClaimConflictError,
   type RoomsRepository,
 } from './rooms.repository';
 
@@ -128,11 +129,45 @@ export class InMemoryRoomsRepository implements RoomsRepository {
     return Promise.resolve(this.cloneMember(member));
   }
 
+  createMember(member: RoomMember): Promise<RoomMember> {
+    this.logger.log(
+      `createMember roomId=${member.roomId} userId=${member.userId}`,
+    );
+
+    if (!this.roomsById.has(member.roomId)) {
+      throw new RoomMutationTargetMissingError(member.roomId);
+    }
+
+    let roomMembers = this.membersByRoomId.get(member.roomId);
+    if (!roomMembers) {
+      roomMembers = new Map<string, RoomMember>();
+      this.membersByRoomId.set(member.roomId, roomMembers);
+    }
+
+    if (roomMembers.has(member.userId)) {
+      throw new RoomMemberAlreadyExistsError(member.roomId, member.userId);
+    }
+
+    roomMembers.set(member.userId, this.cloneMember(member));
+    return Promise.resolve(this.cloneMember(member));
+  }
+
   getMember(roomId: string, userId: string): Promise<RoomMember | null> {
     this.logger.log(`getMember roomId=${roomId} userId=${userId}`);
     const roomMembers = this.membersByRoomId.get(roomId);
     const member = roomMembers?.get(userId);
     return Promise.resolve(member ? this.cloneMember(member) : null);
+  }
+
+  updateMember(member: RoomMember): Promise<RoomMember | null> {
+    const roomMembers = this.membersByRoomId.get(member.roomId);
+
+    if (!roomMembers?.has(member.userId)) {
+      return Promise.resolve(null);
+    }
+
+    roomMembers.set(member.userId, this.cloneMember(member));
+    return Promise.resolve(this.cloneMember(member));
   }
 
   updateMemberRole(
@@ -189,6 +224,53 @@ export class InMemoryRoomsRepository implements RoomsRepository {
         .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
         .map((member) => this.cloneMember(member)),
     );
+  }
+
+  listDueScheduledReminderRooms(nowIso: string): Promise<Room[]> {
+    return Promise.resolve(
+      Array.from(this.roomsById.values())
+        .filter(
+          (room) =>
+            room.isScheduled === true &&
+            Boolean(room.reminderAt) &&
+            room.reminderAt! <= nowIso &&
+            !room.reminderSentAt &&
+            room.reminderStatus !== 'sent',
+        )
+        .map((room) => this.cloneRoom(room)),
+    );
+  }
+
+  claimScheduledReminder(
+    roomId: string,
+    nowIso: string,
+    staleBeforeIso: string,
+  ): Promise<Room> {
+    const room = this.roomsById.get(roomId);
+
+    if (!room) {
+      throw new RoomMutationTargetMissingError(roomId);
+    }
+
+    const canClaim =
+      !room.reminderSentAt &&
+      (room.reminderStatus !== 'sending' ||
+        !room.reminderClaimedAt ||
+        room.reminderClaimedAt < staleBeforeIso);
+
+    if (!canClaim) {
+      throw new ReminderClaimConflictError(roomId);
+    }
+
+    const updatedRoom = {
+      ...this.cloneRoom(room),
+      reminderStatus: 'sending' as const,
+      reminderClaimedAt: nowIso,
+      updatedAt: nowIso,
+    };
+    this.roomsById.set(roomId, updatedRoom);
+
+    return Promise.resolve(this.cloneRoom(updatedRoom));
   }
 
   createInvite(invite: RoomInvite): Promise<RoomInvite> {

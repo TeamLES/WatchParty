@@ -12,18 +12,23 @@ import { randomBytes } from 'crypto';
 import type {
   CreateRoomInviteResponse,
   CreateRoomResponse,
+  CreateScheduledRoomResponse,
+  GetRoomAttendeesResponse,
   GetRoomMembersResponse,
   GetRoomResponse,
   GetRoomsResponse,
   JoinRoomResponse,
+  RsvpRoomResponse,
   RoomMemberResponse,
   RoomMemberRole,
+  RoomMemberRsvpStatus,
   RoomSummaryResponse,
 } from '@watchparty/shared-types';
 import { RealtimePresenceService } from '../realtime/realtime-presence.service';
 import { ROOMS_REPOSITORY } from './constants/rooms-repository.token';
 import type { CreateRoomInviteDto } from './dto/create-room-invite.dto';
 import type { CreateRoomDto } from './dto/create-room.dto';
+import type { CreateScheduledRoomDto } from './dto/create-scheduled-room.dto';
 import type { JoinRoomDto } from './dto/join-room.dto';
 import type { UpdateRoomDto } from './dto/update-room.dto';
 import type { RoomInvite } from './entities/room-invite.entity';
@@ -49,6 +54,83 @@ export class RoomsService {
     this.logger.log(
       `initialized repository=${this.roomsRepository.constructor.name}`,
     );
+  }
+
+  async createScheduledRoom(
+    user: {
+      sub: string;
+      email?: unknown;
+      username?: unknown;
+      preferred_username?: unknown;
+    },
+    createScheduledRoomDto: CreateScheduledRoomDto,
+  ): Promise<CreateScheduledRoomResponse> {
+    const userId = user.sub;
+    const scheduledStartAt = this.parseFutureIsoDate(
+      createScheduledRoomDto.scheduledStartAt,
+      'scheduledStartAt',
+    );
+    const reminderMinutesBefore =
+      createScheduledRoomDto.reminderMinutesBefore ?? 30;
+    const reminderAt = new Date(
+      scheduledStartAt.getTime() - reminderMinutesBefore * 60_000,
+    );
+
+    if (reminderAt.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'reminderAt must be in the future. Choose a later start time or smaller reminder window.',
+      );
+    }
+
+    const isPrivate = createScheduledRoomDto.visibility === 'private';
+    const createdAt = this.nowIsoString();
+    const roomId = this.generateRoomId();
+    const roomUrl = this.buildRoomUrl(roomId);
+    const room: Room = {
+      roomId,
+      title: createScheduledRoomDto.title,
+      ...(createScheduledRoomDto.videoUrl
+        ? { videoUrl: createScheduledRoomDto.videoUrl }
+        : {}),
+      isPrivate,
+      visibilityStatus: isPrivate ? 'private' : 'public',
+      hostUserId: userId,
+      coHostUserId: null,
+      activeWatcherCount: 0,
+      isScheduled: true,
+      scheduledStartAt: scheduledStartAt.toISOString(),
+      reminderMinutesBefore,
+      reminderAt: reminderAt.toISOString(),
+      reminderStatus: 'pending',
+      scheduledTitle: createScheduledRoomDto.title,
+      ...(createScheduledRoomDto.description
+        ? { scheduledDescription: createScheduledRoomDto.description }
+        : {}),
+      ...(createScheduledRoomDto.scheduledTimezone
+        ? { scheduledTimezone: createScheduledRoomDto.scheduledTimezone }
+        : {}),
+      appRoomUrl: roomUrl,
+      status: 'active',
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    await this.roomsRepository.createRoom(room);
+    await this.roomsRepository.createMember({
+      roomId,
+      userId,
+      role: 'host',
+      joinedAt: createdAt,
+      nickname: this.getUserDisplayName(user),
+      email: this.getUserEmail(user) ?? undefined,
+      rsvpStatus: 'going',
+      rsvpUpdatedAt: createdAt,
+    });
+
+    return {
+      ...this.toRoomSummaryResponse(room, null),
+      inviteUrl: roomUrl,
+    };
   }
 
   async createRoom(
@@ -193,6 +275,33 @@ export class RoomsService {
     return roomSummaries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async getMyScheduledRooms(userId: string): Promise<GetRoomsResponse> {
+    // TODO: Replace this scan-style lookup with a scheduled rooms GSI once usage grows.
+    const rooms = await this.roomsRepository.listRooms();
+    const scheduledRooms = rooms.filter((room) => room.isScheduled === true);
+    const matchingRooms: Room[] = [];
+
+    for (const room of scheduledRooms) {
+      if (room.hostUserId === userId) {
+        matchingRooms.push(room);
+        continue;
+      }
+
+      const member = await this.roomsRepository.getMember(room.roomId, userId);
+      if (member?.rsvpStatus === 'going' || member?.rsvpStatus === 'maybe') {
+        matchingRooms.push(room);
+      }
+    }
+
+    return matchingRooms
+      .sort((a, b) =>
+        (a.scheduledStartAt ?? a.createdAt).localeCompare(
+          b.scheduledStartAt ?? b.createdAt,
+        ),
+      )
+      .map((room) => this.toRoomSummaryResponse(room, null));
+  }
+
   async getRoom(roomId: string, userId: string): Promise<GetRoomResponse> {
     this.logger.log(`getRoom roomId=${roomId} userId=${userId}`);
     const room = await this.getRoomOrThrow(roomId);
@@ -302,6 +411,104 @@ export class RoomsService {
       role: addedMember.role,
       joinedAt: addedMember.joinedAt,
       alreadyMember: false,
+    };
+  }
+
+  async setRsvp(
+    roomId: string,
+    user: {
+      sub: string;
+      email?: unknown;
+      username?: unknown;
+      preferred_username?: unknown;
+    },
+    status: Exclude<RoomMemberRsvpStatus, 'none'>,
+  ): Promise<RsvpRoomResponse> {
+    const room = await this.getRoomOrThrow(roomId);
+
+    if (!room.isScheduled && !room.scheduledStartAt) {
+      throw new BadRequestException('RSVP is available only for scheduled rooms');
+    }
+
+    const now = this.nowIsoString();
+    const email = this.getUserEmail(user);
+    if (status === 'going' && !email) {
+      throw new BadRequestException(
+        'An email address is required to RSVP as going',
+      );
+    }
+
+    const existingMember = await this.roomsRepository.getMember(roomId, user.sub);
+    const member: RoomMember = {
+      roomId,
+      userId: user.sub,
+      role: existingMember?.role ?? (room.hostUserId === user.sub ? 'host' : 'viewer'),
+      joinedAt: existingMember?.joinedAt ?? now,
+      ...(existingMember?.nickname
+        ? { nickname: existingMember.nickname }
+        : { nickname: this.getUserDisplayName(user) }),
+      ...(email ? { email } : existingMember?.email ? { email: existingMember.email } : {}),
+      rsvpStatus: status,
+      rsvpUpdatedAt: now,
+      ...(existingMember?.lastSeenAt ? { lastSeenAt: existingMember.lastSeenAt } : {}),
+      ...(existingMember?.reminderEmailSentAt
+        ? { reminderEmailSentAt: existingMember.reminderEmailSentAt }
+        : {}),
+      ...(existingMember?.reminderEmailStatus
+        ? { reminderEmailStatus: existingMember.reminderEmailStatus }
+        : {}),
+      ...(existingMember?.reminderEmailError
+        ? { reminderEmailError: existingMember.reminderEmailError }
+        : {}),
+    };
+
+    let updatedMember: RoomMember | null;
+    if (existingMember) {
+      updatedMember = await this.roomsRepository.updateMember(member);
+    } else {
+      try {
+        updatedMember = await this.roomsRepository.createMember(member);
+      } catch (error) {
+        if (error instanceof RoomCapacityExceededError) {
+          throw new ConflictException({
+            code: 'ROOM_CAPACITY_EXCEEDED',
+            message: 'Room is full.',
+          });
+        }
+        throw error;
+      }
+    }
+
+    if (!updatedMember) {
+      throw new NotFoundException('Member not found in this room');
+    }
+
+    return {
+      roomId,
+      member: this.toRoomMemberResponse(updatedMember),
+    };
+  }
+
+  async getRoomAttendees(
+    roomId: string,
+    userId: string,
+  ): Promise<GetRoomAttendeesResponse> {
+    const room = await this.getRoomOrThrow(roomId);
+    const isController =
+      room.hostUserId === userId || room.coHostUserId === userId;
+    const members = await this.roomsRepository.getMembersByRoomId(roomId);
+
+    if (!isController) {
+      const member = members.find((candidate) => candidate.userId === userId);
+      return {
+        roomId,
+        attendees: member ? [this.toRoomMemberResponse(member, false)] : [],
+      };
+    }
+
+    return {
+      roomId,
+      attendees: members.map((member) => this.toRoomMemberResponse(member, true)),
     };
   }
 
@@ -518,12 +725,21 @@ export class RoomsService {
     return expiresAtDate.toISOString();
   }
 
-  private toRoomMemberResponse(member: RoomMember): RoomMemberResponse {
+  private toRoomMemberResponse(
+    member: RoomMember,
+    includeEmail = false,
+  ): RoomMemberResponse {
     return {
       userId: member.userId,
       role: member.role,
       joinedAt: member.joinedAt,
       nickname: member.nickname ?? null,
+      ...(includeEmail ? { email: member.email ?? null } : {}),
+      rsvpStatus: member.rsvpStatus ?? 'none',
+      rsvpUpdatedAt: member.rsvpUpdatedAt ?? null,
+      reminderEmailSentAt: member.reminderEmailSentAt ?? null,
+      reminderEmailStatus: member.reminderEmailStatus ?? null,
+      reminderEmailError: member.reminderEmailError ?? null,
     };
   }
 
@@ -542,9 +758,67 @@ export class RoomsService {
       maxCapacity: room.maxCapacity ?? null,
       activeWatcherCount: room.activeWatcherCount,
       onlineCount,
+      isScheduled: room.isScheduled ?? false,
+      scheduledStartAt: room.scheduledStartAt ?? null,
+      reminderMinutesBefore: room.reminderMinutesBefore ?? null,
+      reminderAt: room.reminderAt ?? null,
+      reminderSentAt: room.reminderSentAt ?? null,
+      reminderStatus: room.reminderStatus ?? null,
+      scheduledTitle: room.scheduledTitle ?? null,
+      scheduledDescription: room.scheduledDescription ?? null,
+      scheduledTimezone: room.scheduledTimezone ?? null,
+      appRoomUrl: room.appRoomUrl ?? null,
       status: room.status,
       createdAt: room.createdAt,
     };
+  }
+
+  private parseFutureIsoDate(value: string, fieldName: string): Date {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException(`${fieldName} must be a valid ISO date-time`);
+    }
+
+    if (date.getTime() <= Date.now()) {
+      throw new BadRequestException(`${fieldName} must be in the future`);
+    }
+
+    return date;
+  }
+
+  private buildRoomUrl(roomId: string): string {
+    const baseUrl =
+      process.env.APP_BASE_URL?.replace(/\/+$/g, '') ?? 'http://localhost:3000';
+
+    return `${baseUrl}/room/${roomId}`;
+  }
+
+  private getUserEmail(user: { email?: unknown }): string | null {
+    return typeof user.email === 'string' && user.email.includes('@')
+      ? user.email.trim().toLowerCase()
+      : null;
+  }
+
+  private getUserDisplayName(user: {
+    username?: unknown;
+    preferred_username?: unknown;
+    email?: unknown;
+  }): string | undefined {
+    const candidates = [user.username, user.preferred_username, user.email];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return undefined;
   }
 
   private nowIsoString(): string {

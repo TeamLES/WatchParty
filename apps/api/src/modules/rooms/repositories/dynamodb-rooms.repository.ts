@@ -38,6 +38,7 @@ import {
   RoomCapacityExceededError,
   RoomMemberAlreadyExistsError,
   RoomMutationTargetMissingError,
+  ReminderClaimConflictError,
   type RoomsRepository,
 } from './rooms.repository';
 
@@ -318,6 +319,60 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
   }
 
+  async createMember(member: RoomMember): Promise<RoomMember> {
+    this.logger.log(
+      `createMember roomId=${member.roomId} userId=${member.userId}`,
+    );
+
+    try {
+      await this.documentClient.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              ConditionCheck: {
+                TableName: this.tables.rooms,
+                Key: {
+                  roomId: member.roomId,
+                },
+                ConditionExpression: 'attribute_exists(roomId)',
+              },
+            },
+            {
+              Put: {
+                TableName: this.tables.roomMembers,
+                Item: toRoomMemberItem(member),
+                ConditionExpression:
+                  'attribute_not_exists(roomId) AND attribute_not_exists(userId)',
+              },
+            },
+          ],
+        }),
+      );
+
+      return member;
+    } catch (error) {
+      if (!isTransactionCanceled(error)) {
+        throw this.toInfrastructureException(
+          'createMember',
+          error,
+          'roomMembers',
+        );
+      }
+
+      const existingMember = await this.getMember(member.roomId, member.userId);
+      if (existingMember) {
+        throw new RoomMemberAlreadyExistsError(member.roomId, member.userId);
+      }
+
+      const room = await this.getRoomById(member.roomId);
+      if (!room) {
+        throw new RoomMutationTargetMissingError(member.roomId);
+      }
+
+      throw this.toInfrastructureException('createMember', error, 'roomMembers');
+    }
+  }
+
   async getMember(roomId: string, userId: string): Promise<RoomMember | null> {
     let response;
 
@@ -337,6 +392,31 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
 
     return fromRoomMemberItem(asRecord(response.Item));
+  }
+
+  async updateMember(member: RoomMember): Promise<RoomMember | null> {
+    this.logger.log(
+      `updateMember roomId=${member.roomId} userId=${member.userId}`,
+    );
+
+    try {
+      await this.documentClient.send(
+        new PutCommand({
+          TableName: this.tables.roomMembers,
+          Item: toRoomMemberItem(member),
+          ConditionExpression:
+            'attribute_exists(roomId) AND attribute_exists(userId)',
+        }),
+      );
+
+      return member;
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) {
+        return null;
+      }
+
+      throw this.toInfrastructureException('updateMember', error, 'roomMembers');
+    }
   }
 
   async updateMemberRole(
@@ -474,6 +554,91 @@ export class DynamoDBRoomsRepository implements RoomsRepository {
     }
 
     return members.sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
+  }
+
+  async listDueScheduledReminderRooms(nowIso: string): Promise<Room[]> {
+    this.logger.log(`listDueScheduledReminderRooms now=${nowIso}`);
+    // TODO: add a production GSI on reminderStatus/reminderAt to avoid scanning.
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    try {
+      do {
+        const response = await this.documentClient.send(
+          new ScanCommand({
+            TableName: this.tables.rooms,
+            FilterExpression:
+              'isScheduled = :true AND reminderAt <= :now AND attribute_not_exists(reminderSentAt) AND (attribute_not_exists(reminderStatus) OR reminderStatus <> :sent)',
+            ExpressionAttributeValues: {
+              ':true': true,
+              ':now': nowIso,
+              ':sent': 'sent',
+            },
+            ...(lastEvaluatedKey
+              ? { ExclusiveStartKey: lastEvaluatedKey }
+              : {}),
+          }),
+        );
+
+        items.push(
+          ...(response.Items ?? []).map((item) => asRecord(item) ?? {}),
+        );
+        lastEvaluatedKey = asRecord(response.LastEvaluatedKey);
+      } while (lastEvaluatedKey);
+    } catch (error) {
+      throw this.toInfrastructureException(
+        'listDueScheduledReminderRooms',
+        error,
+        'rooms',
+      );
+    }
+
+    return items
+      .map((item) => fromRoomItem(item))
+      .filter((room): room is Room => room !== null);
+  }
+
+  async claimScheduledReminder(
+    roomId: string,
+    nowIso: string,
+    staleBeforeIso: string,
+  ): Promise<Room> {
+    try {
+      const response = await this.documentClient.send(
+        new UpdateCommand({
+          TableName: this.tables.rooms,
+          Key: { roomId },
+          UpdateExpression:
+            'SET reminderStatus = :sending, reminderClaimedAt = :now, updatedAt = :now REMOVE reminderError',
+          ConditionExpression:
+            'attribute_exists(roomId) AND attribute_not_exists(reminderSentAt) AND (attribute_not_exists(reminderStatus) OR reminderStatus <> :sending OR reminderClaimedAt < :staleBefore)',
+          ExpressionAttributeValues: {
+            ':sending': 'sending',
+            ':now': nowIso,
+            ':staleBefore': staleBeforeIso,
+          },
+          ReturnValues: 'ALL_NEW',
+        }),
+      );
+
+      const room = fromRoomItem(asRecord(response.Attributes));
+
+      if (!room) {
+        throw new RoomMutationTargetMissingError(roomId);
+      }
+
+      return room;
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) {
+        throw new ReminderClaimConflictError(roomId);
+      }
+
+      throw this.toInfrastructureException(
+        'claimScheduledReminder',
+        error,
+        'rooms',
+      );
+    }
   }
 
   async createInvite(invite: RoomInvite): Promise<RoomInvite> {

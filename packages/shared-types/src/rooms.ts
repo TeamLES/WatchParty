@@ -1,12 +1,21 @@
 export type RoomStatus = "active" | "ended";
 
 export type RoomMemberRole = "host" | "co-host" | "viewer";
+export type RoomMemberRsvpStatus = "going" | "not_going" | "maybe" | "none";
+export type RoomMemberReminderEmailStatus = "sent" | "failed";
+export type ScheduledReminderStatus = "pending" | "sending" | "sent" | "failed";
 
 export interface RoomMemberResponse {
   userId: string;
   role: RoomMemberRole;
   joinedAt: string;
   nickname?: string | null;
+  email?: string | null;
+  rsvpStatus?: RoomMemberRsvpStatus;
+  rsvpUpdatedAt?: string | null;
+  reminderEmailSentAt?: string | null;
+  reminderEmailStatus?: RoomMemberReminderEmailStatus | null;
+  reminderEmailError?: string | null;
 }
 
 export interface RoomSummaryResponse {
@@ -20,6 +29,16 @@ export interface RoomSummaryResponse {
   maxCapacity: number | null;
   activeWatcherCount: number;
   onlineCount?: number | null;
+  isScheduled: boolean;
+  scheduledStartAt: string | null;
+  reminderMinutesBefore: number | null;
+  reminderAt: string | null;
+  reminderSentAt: string | null;
+  reminderStatus: ScheduledReminderStatus | null;
+  scheduledTitle: string | null;
+  scheduledDescription: string | null;
+  scheduledTimezone: string | null;
+  appRoomUrl: string | null;
   status: RoomStatus;
   createdAt: string;
 }
@@ -56,4 +75,18 @@ export interface GetRoomMembersResponse {
   roomId: string;
   activeWatcherCount: number;
   members: RoomMemberResponse[];
+}
+
+export interface CreateScheduledRoomResponse extends RoomSummaryResponse {
+  inviteUrl: string;
+}
+
+export interface RsvpRoomResponse {
+  roomId: string;
+  member: RoomMemberResponse;
+}
+
+export interface GetRoomAttendeesResponse {
+  roomId: string;
+  attendees: RoomMemberResponse[];
 }

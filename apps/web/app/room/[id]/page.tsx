@@ -21,9 +21,11 @@ import type {
   CreateHighlightRequest,
   CreateHighlightResponse,
   GetHighlightsResponse,
+  GetRoomAttendeesResponse,
   GetRoomResponse,
   HighlightResponse,
   RoomMemberResponse,
+  RsvpRoomResponse,
   RoomRoleUpdatedEvent,
   ChatMessageEvent,
   ReactionEvent,
@@ -86,6 +88,17 @@ function formatDurationMs(milliseconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function formatScheduledDateTime(value: string | null): string {
+  if (!value) {
+    return "Not scheduled";
+  }
+
+  return new Date(value).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export default function RoomPage({
   params,
 }: {
@@ -140,6 +153,8 @@ export default function RoomPage({
   const [highlightEditNote, setHighlightEditNote] = useState("");
   const [isSavingHighlightEdit, setIsSavingHighlightEdit] = useState(false);
   const [lastKnownPositionMs, setLastKnownPositionMs] = useState(0);
+  const [attendees, setAttendees] = useState<RoomMemberResponse[]>([]);
+  const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
   const [playingHighlight, setPlayingHighlight] = useState<{
     highlight: HighlightResponse;
     shouldRender: boolean;
@@ -191,6 +206,23 @@ export default function RoomPage({
     },
     [roomId],
   );
+
+  const fetchAttendees = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/attendees`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = (await res.json()) as GetRoomAttendeesResponse;
+      setAttendees(data.attendees);
+    } catch (error) {
+      console.error("Failed to fetch attendees", error);
+    }
+  }, [roomId]);
 
   const formatMemberDisplayName = useCallback((member: RoomMemberResponse) => {
     const nickname = member.nickname?.trim();
@@ -343,7 +375,10 @@ export default function RoomPage({
     }
 
     void fetchHighlights({ showLoading: true });
-  }, [fetchHighlights, hasRoomLoaded]);
+    if (room?.isScheduled) {
+      void fetchAttendees();
+    }
+  }, [fetchAttendees, fetchHighlights, hasRoomLoaded, room?.isScheduled]);
 
   useEffect(() => {
     if (!activeVideoId) {
@@ -505,6 +540,62 @@ export default function RoomPage({
 
     socketPlayerRef.current?.sendChatMessage(newMessage);
     setNewMessage("");
+  };
+
+  const handleRsvp = async (status: "going" | "maybe" | "not_going") => {
+    setIsUpdatingRsvp(true);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/rsvp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Failed to update RSVP", res.status, text);
+        toast.error("Could not update RSVP");
+        return;
+      }
+
+      const data = (await res.json()) as RsvpRoomResponse;
+      setRoom((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: [
+                ...prev.members.filter(
+                  (member) => member.userId !== data.member.userId,
+                ),
+                data.member,
+              ],
+              isMember: true,
+            }
+          : prev,
+      );
+      roomRef.current = roomRef.current
+        ? {
+            ...roomRef.current,
+            members: [
+              ...roomRef.current.members.filter(
+                (member) => member.userId !== data.member.userId,
+              ),
+              data.member,
+            ],
+            isMember: true,
+          }
+        : roomRef.current;
+      await fetchAttendees();
+      toast.success("RSVP updated");
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not update RSVP");
+    } finally {
+      setIsUpdatingRsvp(false);
+    }
   };
 
   const handleChatEvent = useCallback(
@@ -1113,6 +1204,57 @@ export default function RoomPage({
                 </Button>
               </div>
             )}
+
+            {room.isScheduled && (
+              <div className="border-t border-border/50 pt-4 dark:border-white/5">
+                <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-primary">
+                      Scheduled for
+                    </p>
+                    <p className="text-base font-bold">
+                      {formatScheduledDateTime(room.scheduledStartAt)}
+                    </p>
+                    {room.scheduledDescription && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {room.scheduledDescription}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["going", "maybe", "not_going"] as const).map(
+                      (status) => {
+                        const label =
+                          status === "going"
+                            ? "I'm going"
+                            : status === "maybe"
+                              ? "Maybe"
+                              : "Not going";
+                        const active = room.members.some(
+                          (member) =>
+                            member.userId === currentUserId &&
+                            member.rsvpStatus === status,
+                        );
+
+                        return (
+                          <Button
+                            key={status}
+                            type="button"
+                            size="sm"
+                            variant={active ? "default" : "secondary"}
+                            className="rounded-xl"
+                            disabled={isUpdatingRsvp}
+                            onClick={() => void handleRsvp(status)}
+                          >
+                            {label}
+                          </Button>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Video Player */}
@@ -1256,6 +1398,67 @@ export default function RoomPage({
         <aside className="w-full lg:w-96 xl:w-100 flex flex-col shrink-0 gap-4 max-h-[calc(100vh-8rem)] pb-2">
           {!isFullscreen && (
             <>
+              {room.isScheduled && room.isController && (
+                <div className="glass-card panel-surface rounded-3xl p-4 shadow-lg">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Attendees</h2>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-lg"
+                      onClick={() => void fetchAttendees()}
+                    >
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {attendees.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No RSVPs yet.
+                      </p>
+                    ) : (
+                      attendees.map((member) => {
+                        const displayName = formatMemberDisplayName(member);
+
+                        return (
+                          <div
+                            key={member.userId}
+                            className="rounded-xl border border-border/50 bg-card/70 p-3 text-sm dark:border-white/5 dark:bg-black/20"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium">{displayName}</span>
+                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-bold uppercase text-muted-foreground">
+                                {member.rsvpStatus ?? "none"}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {member.role === "host" && (
+                                <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                                  HOST
+                                </span>
+                              )}
+                              {member.role === "co-host" && (
+                                <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">
+                                  CO-HOST
+                                </span>
+                              )}
+                              <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                                {member.reminderEmailStatus === "sent"
+                                  ? "REMINDER SENT"
+                                  : member.reminderEmailStatus === "failed"
+                                    ? "REMINDER FAILED"
+                                    : "REMINDER PENDING"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
               <HighlightsSection
                 highlights={highlights}
                 isLoading={isLoadingHighlights}
