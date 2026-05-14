@@ -353,7 +353,11 @@ export class RoomsService {
       const providedPassword = joinRoomDto?.password?.trim() ?? '';
       const storedPassword = room.password ?? '';
 
-      if (!providedPassword || providedPassword !== storedPassword) {
+      if (!storedPassword && !room.isScheduled) {
+        throw new ForbiddenException('Invalid password for private room');
+      }
+
+      if (storedPassword && providedPassword !== storedPassword) {
         throw new ForbiddenException('Invalid password for private room');
       }
     }

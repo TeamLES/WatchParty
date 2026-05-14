@@ -13,7 +13,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "test": "node --test -r ts-node/register src/modules/rooms/rooms.service.spec.ts",
+    "test": "node --test -r ts-node/register src/modules/rooms/rooms.service.spec.ts src/modules/rooms/mappers/rooms-dynamodb.mapper.spec.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
   },
   "dependencies": {

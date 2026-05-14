@@ -21,6 +21,7 @@ export default function JoinRoomPage({
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const requiresPassword = room?.isPrivate === true && !room.isScheduled;
 
   useEffect(() => {
     async function fetchRoom() {
@@ -73,7 +74,7 @@ export default function JoinRoomPage({
     e.preventDefault();
 
     // Require password for private rooms
-    if (room?.isPrivate && !password?.trim()) {
+    if (requiresPassword && !password?.trim()) {
       alert("Heslo je vyžadované pre private roomu");
       return;
     }
@@ -82,7 +83,7 @@ export default function JoinRoomPage({
 
     try {
       const payload: Record<string, string> = {};
-      if (room?.isPrivate && password) {
+      if (requiresPassword && password) {
         payload.password = password;
       }
 
@@ -172,7 +173,7 @@ export default function JoinRoomPage({
         </div>
 
         <form onSubmit={handleJoin} className="space-y-5 pt-4">
-          {room.isPrivate && (
+          {requiresPassword && (
             <div className="space-y-2 text-left">
               <label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 <LockIcon className="size-4 text-red-500" /> Room is private
@@ -190,7 +191,7 @@ export default function JoinRoomPage({
 
           <Button
             type="submit"
-            disabled={isJoining || (room?.isPrivate && !password?.trim())}
+            disabled={isJoining || (requiresPassword && !password?.trim())}
             className="w-full h-14 text-base font-bold shadow-[0_0_20px_rgba(232,121,249,0.2)] hover:shadow-[0_0_30px_rgba(232,121,249,0.4)] transition-all rounded-xl"
           >
             {isJoining ? "Connecting..." : "Enter Room"}

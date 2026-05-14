@@ -107,3 +107,8 @@ export async function getAccessTokenFromCookies(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
 }
+
+export async function getIdTokenFromCookies(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(ID_TOKEN_COOKIE_NAME)?.value ?? null;
+}

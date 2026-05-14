@@ -9,6 +9,7 @@ import {
   SearchIcon,
   MonitorPlayIcon,
   CalendarClockIcon,
+  ClockIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +39,17 @@ const formatWatchingLabel = (room: RoomSummaryResponse) => {
   return room.activeWatcherCount === 1
     ? "1 watching"
     : `${room.activeWatcherCount} watching`;
+};
+
+const formatScheduledStart = (value: string | null) => {
+  if (!value) {
+    return "Start time not set";
+  }
+
+  return new Date(value).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 };
 
 export default function HubPage() {
@@ -104,9 +116,18 @@ export default function HubPage() {
   const [scheduleReminderMinutes, setScheduleReminderMinutes] = useState("30");
   const [isScheduling, setIsScheduling] = useState(false);
 
-  const searchedRooms = rooms.filter((room) =>
-    room.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  const searchedRooms = rooms.filter(
+    (room) =>
+      !room.isScheduled &&
+      room.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const scheduledRooms = rooms
+    .filter((room) => room.isScheduled)
+    .sort((a, b) =>
+      (a.scheduledStartAt ?? a.createdAt).localeCompare(
+        b.scheduledStartAt ?? b.createdAt,
+      ),
+    );
   const filteredRooms = searchedRooms.filter((room) => {
     const watchingCount = getWatchingCount(room);
 
@@ -414,6 +435,88 @@ export default function HubPage() {
               className="h-11 rounded-xl md:col-span-2"
             />
           </form>
+        </section>
+
+        <section className="space-y-5">
+          <div className="flex flex-col gap-1 border-b border-border/60 pb-4 dark:border-white/5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-3xl font-extrabold tracking-tight">
+                Scheduled Parties
+              </h3>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">
+                Upcoming planned sessions everyone can join.
+              </p>
+            </div>
+          </div>
+
+          {isLoadingRooms ? (
+            <div className="glass-card rounded-3xl border-dashed py-10 text-center text-muted-foreground">
+              <CalendarClockIcon className="mx-auto mb-3 size-8 animate-pulse opacity-30" />
+              <p>Loading scheduled parties...</p>
+            </div>
+          ) : scheduledRooms.length === 0 ? (
+            <div className="glass-card rounded-3xl border-dashed py-10 text-center text-muted-foreground">
+              <CalendarClockIcon className="mx-auto mb-3 size-8 opacity-30" />
+              <p>No scheduled parties yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {scheduledRooms.map((room) => (
+                <Card
+                  key={room.roomId}
+                  className="glass-card cursor-pointer rounded-3xl border-border/60 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 dark:border-white/10"
+                  onClick={() => router.push(`/room/join/${room.roomId}`)}
+                >
+                  <CardContent className="flex h-full flex-col gap-4 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="line-clamp-2 text-lg font-bold leading-tight transition-colors group-hover:text-primary">
+                          {room.scheduledTitle ?? room.title}
+                        </h3>
+                        {room.scheduledDescription && (
+                          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                            {room.scheduledDescription}
+                          </p>
+                        )}
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-primary/30 bg-primary/10 text-primary"
+                      >
+                        Planned
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <ClockIcon className="size-4 text-primary" />
+                        <span>{formatScheduledStart(room.scheduledStartAt)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <UsersRoundIcon className="size-4 text-primary" />
+                        <span>
+                          {room.reminderMinutesBefore ?? 30} min reminder
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
+                      <span className="text-xs font-semibold uppercase text-muted-foreground">
+                        {room.isPrivate ? "Private invite" : "Public"}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-xl font-semibold text-primary"
+                      >
+                        Open
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* ACTIVE ROOMS GRID */}

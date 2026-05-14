@@ -188,7 +188,7 @@ export function fromRoomItem(item: UnknownItem | undefined): Room | null {
       ? reminderStatusRaw
       : undefined;
 
-  if (isPrivate && !password) {
+  if (isPrivate && !password && !isScheduled) {
     return null;
   }
 

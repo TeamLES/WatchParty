@@ -350,6 +350,31 @@ test('host can create a scheduled party', async () => {
   assert.equal(hostMember?.email, 'host@example.com');
 });
 
+test('viewer can join a scheduled private party without a password', async () => {
+  repository.rooms.set('scheduled-private', {
+    roomId: 'scheduled-private',
+    title: 'Scheduled private room',
+    isPrivate: true,
+    visibilityStatus: 'private',
+    hostUserId: 'host',
+    coHostUserId: null,
+    activeWatcherCount: 0,
+    isScheduled: true,
+    scheduledStartAt: futureIso(120),
+    reminderAt: futureIso(90),
+    reminderMinutesBefore: 30,
+    reminderStatus: 'pending',
+    status: 'active',
+    createdAt: '2026-05-14T00:00:00.000Z',
+  });
+
+  const response = await service.joinRoom('scheduled-private', 'viewer', {});
+
+  assert.equal(response.roomId, 'scheduled-private');
+  assert.equal(response.userId, 'viewer');
+  assert.equal(response.alreadyMember, false);
+});
+
 test('scheduledStartAt in the past fails', async () => {
   await assert.rejects(
     () =>

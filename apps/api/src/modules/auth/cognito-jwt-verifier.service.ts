@@ -14,9 +14,24 @@ export interface VerifiedCognitoAccessToken {
   [key: string]: unknown;
 }
 
+export interface VerifiedCognitoIdToken {
+  sub: string;
+  token_use: string;
+  email?: string;
+  email_verified?: boolean;
+  username?: string;
+  preferred_username?: string;
+  iss: string;
+  iat: number;
+  exp: number;
+  [key: string]: unknown;
+}
+
 @Injectable()
 export class CognitoJwtVerifierService {
-  private readonly verifier: ReturnType<typeof CognitoJwtVerifier.create>;
+  private readonly accessTokenVerifier: ReturnType<typeof CognitoJwtVerifier.create>;
+
+  private readonly idTokenVerifier: ReturnType<typeof CognitoJwtVerifier.create>;
 
   private readonly expectedIssuer: string;
 
@@ -27,16 +42,22 @@ export class CognitoJwtVerifierService {
       this.getRequiredEnv('COGNITO_ISSUER'),
     );
 
-    this.verifier = CognitoJwtVerifier.create({
+    this.accessTokenVerifier = CognitoJwtVerifier.create({
       userPoolId,
       tokenUse: 'access',
+      clientId: appClientId,
+    });
+
+    this.idTokenVerifier = CognitoJwtVerifier.create({
+      userPoolId,
+      tokenUse: 'id',
       clientId: appClientId,
     });
   }
 
   async verifyAccessToken(token: string): Promise<VerifiedCognitoAccessToken> {
     try {
-      const payload = await this.verifier.verify(token);
+      const payload = await this.accessTokenVerifier.verify(token);
 
       if (this.normalizeIssuer(payload.iss) !== this.expectedIssuer) {
         throw new UnauthorizedException('Token issuer mismatch');
@@ -45,6 +66,20 @@ export class CognitoJwtVerifierService {
       return payload as VerifiedCognitoAccessToken;
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
+    }
+  }
+
+  async verifyIdToken(token: string): Promise<VerifiedCognitoIdToken> {
+    try {
+      const payload = await this.idTokenVerifier.verify(token);
+
+      if (this.normalizeIssuer(payload.iss) !== this.expectedIssuer) {
+        throw new UnauthorizedException('Token issuer mismatch');
+      }
+
+      return payload as VerifiedCognitoIdToken;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired ID token');
     }
   }
 

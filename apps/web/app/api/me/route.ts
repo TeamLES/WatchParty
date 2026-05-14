@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { getAccessTokenFromCookies } from "@/lib/cookies";
+import {
+  getAccessTokenFromCookies,
+  getIdTokenFromCookies,
+} from "@/lib/cookies";
 import { getWebPublicEnv } from "@/lib/env";
 import { joinUrl } from "@/lib/utils";
 
 export async function GET(): Promise<NextResponse> {
   const accessToken = await getAccessTokenFromCookies();
+  const idToken = await getIdTokenFromCookies();
 
   if (!accessToken) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -13,13 +17,19 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     const env = getWebPublicEnv();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    if (idToken) {
+      headers["X-WatchParty-Id-Token"] = idToken;
+    }
+
     const response = await fetch(
       joinUrl(env.NEXT_PUBLIC_API_BASE_URL, "/api/auth/me"),
       {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers,
         cache: "no-store",
       },
     );

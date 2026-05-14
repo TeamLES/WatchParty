@@ -542,7 +542,7 @@ export default function RoomPage({
     setNewMessage("");
   };
 
-  const handleRsvp = async (status: "going" | "maybe" | "not_going") => {
+  const handleRsvp = async (status: "going" | "not_going") => {
     setIsUpdatingRsvp(true);
 
     try {
@@ -1222,14 +1222,12 @@ export default function RoomPage({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(["going", "maybe", "not_going"] as const).map(
+                    {(["going", "not_going"] as const).map(
                       (status) => {
                         const label =
                           status === "going"
                             ? "I'm going"
-                            : status === "maybe"
-                              ? "Maybe"
-                              : "Not going";
+                            : "Not going";
                         const active = room.members.some(
                           (member) =>
                             member.userId === currentUserId &&
