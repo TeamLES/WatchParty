@@ -25,20 +25,30 @@ import { extractYoutubeId } from "@/lib/youtube";
 
 type RoomActivityFilter = "all" | "active" | "empty";
 
-const getWatchingCount = (room: RoomSummaryResponse) => room.activeWatcherCount;
+const getWatchingCount = (room: RoomSummaryResponse) => {
+  const count = Number(room.activeWatcherCount);
+
+  if (!Number.isFinite(count)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(count));
+};
 
 const formatWatchingLabel = (room: RoomSummaryResponse) => {
   if (room.maxCapacity !== null) {
-    return `${room.activeWatcherCount} / ${room.maxCapacity} watching`;
+    return `${getWatchingCount(room)} / ${room.maxCapacity} watching`;
   }
 
-  if (room.activeWatcherCount === 0) {
+  const watchingCount = getWatchingCount(room);
+
+  if (watchingCount === 0) {
     return "No one watching";
   }
 
-  return room.activeWatcherCount === 1
+  return watchingCount === 1
     ? "1 watching"
-    : `${room.activeWatcherCount} watching`;
+    : `${watchingCount} watching`;
 };
 
 const formatScheduledStart = (value: string | null) => {

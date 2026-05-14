@@ -40,10 +40,12 @@ import type {
 import { Button } from "@/components/ui/button";
 
 type SocketStatus = "idle" | "connecting" | "connected" | "unavailable";
+type PlaybackRemoteEvent = PlaybackSnapshotEvent | PlaybackSyncEvent;
 
 export interface SyncedYouTubePlayerRef {
   getCurrentPositionMs: () => number;
   playLocalSegment: (startMs: number, endMs: number) => void;
+  requestPlayForEveryone: () => boolean;
   sendChatMessage: (text: string) => void;
   sendReaction: (emoji: string) => void;
 }
@@ -257,11 +259,14 @@ export const SyncedYouTubePlayer = forwardRef<
   const mutedRef = useRef(false);
   const playerReadyRef = useRef(false);
   const isHostRef = useRef(isHost);
+  const pendingPlayForEveryoneRef = useRef(false);
+  const pendingPlaybackEventRef = useRef<PlaybackRemoteEvent | null>(null);
   const sendPlaybackEventRef = useRef<typeof sendPlaybackEvent | null>(null);
   const onOnlineCountChangeRef = useRef(onOnlineCountChange);
   const onChatEventRef = useRef(onChatEvent);
   const onRoomRoleUpdatedRef = useRef(onRoomRoleUpdated);
   const onRemoteVideoIdRef = useRef(onRemoteVideoId);
+  const flushPendingPlayForEveryoneRef = useRef<(() => void) | null>(null);
 
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("idle");
   const [socketError, setSocketError] = useState<string | null>(null);
@@ -427,6 +432,12 @@ export const SyncedYouTubePlayer = forwardRef<
     }
   }, []);
 
+  const finishApplyingLocalCommand = useCallback(() => {
+    window.setTimeout(() => {
+      applyingRemoteRef.current = false;
+    }, 500);
+  }, []);
+
   const finishLocalSegmentPlayback = useCallback(
     (pauseVideo: boolean) => {
       clearLocalSegmentTimer();
@@ -499,19 +510,74 @@ export const SyncedYouTubePlayer = forwardRef<
       return false;
     }
 
+    const didSendSync =
+      sendPlaybackEventRef.current?.("play", "playing") ?? false;
+
+    if (!didSendSync) {
+      return false;
+    }
+
+    applyingRemoteRef.current = true;
     try {
       player.playVideo();
       setPlaybackState("playing");
       playbackStateRef.current = "playing";
-      return sendPlaybackEventRef.current?.("play", "playing") ?? false;
     } catch {
+      // The confirmed websocket event will still keep the rest of the room in sync.
+    } finally {
+      finishApplyingLocalCommand();
+    }
+
+    return true;
+  }, [finishApplyingLocalCommand]);
+
+  const flushPendingPlayForEveryone = useCallback(() => {
+    if (!pendingPlayForEveryoneRef.current) {
+      return;
+    }
+
+    if (
+      !isHostRef.current ||
+      !playerReadyRef.current ||
+      !playerRef.current ||
+      socketRef.current?.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+
+    pendingPlayForEveryoneRef.current = false;
+    if (!playForEveryone()) {
+      pendingPlayForEveryoneRef.current = true;
+    }
+  }, [playForEveryone]);
+
+  useEffect(() => {
+    flushPendingPlayForEveryoneRef.current = flushPendingPlayForEveryone;
+  }, [flushPendingPlayForEveryone]);
+
+  const requestPlayForEveryone = useCallback(() => {
+    if (!isHostRef.current) {
       return false;
     }
-  }, []);
+
+    pendingPlayForEveryoneRef.current = true;
+
+    if (
+      !playerReadyRef.current ||
+      !playerRef.current ||
+      socketRef.current?.readyState !== WebSocket.OPEN
+    ) {
+      return true;
+    }
+
+    flushPendingPlayForEveryone();
+    return true;
+  }, [flushPendingPlayForEveryone]);
 
   useImperativeHandle(ref, () => ({
     getCurrentPositionMs: () => readPositionMs(),
     playLocalSegment,
+    requestPlayForEveryone,
     sendChatMessage: (text: string) => {
       sendSocketMessage({
         action: "chatMessage",
@@ -542,11 +608,7 @@ export const SyncedYouTubePlayer = forwardRef<
       const state = stateOverride ?? playbackStateRef.current;
       const nextPositionMs = positionOverrideMs ?? readPositionMs();
 
-      sequenceRef.current = nextSequence;
-      setPlaybackState(state);
-      setPositionMs(nextPositionMs);
-
-      return sendSocketMessage({
+      const didSend = sendSocketMessage({
         action: "syncPlayback",
         roomId,
         ...(videoId ? { videoId } : {}),
@@ -557,6 +619,14 @@ export const SyncedYouTubePlayer = forwardRef<
         eventId: createEventId(),
         sentAt: new Date().toISOString(),
       });
+
+      if (!didSend) {
+        return false;
+      }
+
+      sequenceRef.current = nextSequence;
+
+      return true;
     },
     [readPositionMs, roomId, sendSocketMessage, videoId],
   );
@@ -566,17 +636,25 @@ export const SyncedYouTubePlayer = forwardRef<
   }, [sendPlaybackEvent]);
 
   const applyRemotePlayback = useCallback(
-    (event: PlaybackSnapshotEvent | PlaybackSyncEvent) => {
-      if (
-        localSegmentActiveRef.current ||
-        !playerReadyRef.current ||
-        event.roomId !== roomId
-      ) {
+    (event: PlaybackRemoteEvent) => {
+      if (event.roomId !== roomId) {
+        return;
+      }
+
+      if (localSegmentActiveRef.current) {
+        return;
+      }
+
+      if (!playerReadyRef.current || !playerRef.current) {
+        pendingPlaybackEventRef.current = event;
+        sequenceRef.current = Math.max(sequenceRef.current, event.sequence);
         return;
       }
 
       const player = playerRef.current;
       if (!player) {
+        pendingPlaybackEventRef.current = event;
+        sequenceRef.current = Math.max(sequenceRef.current, event.sequence);
         return;
       }
 
@@ -643,6 +721,7 @@ export const SyncedYouTubePlayer = forwardRef<
 
       if (message.type === "room_role_updated" && message.roomId === roomId) {
         onRoomRoleUpdatedRef.current?.(message);
+        sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
         return;
       }
 
@@ -666,20 +745,24 @@ export const SyncedYouTubePlayer = forwardRef<
           return;
         }
 
+        if (message.sequence < sequenceRef.current) {
+          return;
+        }
+
         sequenceRef.current = Math.max(sequenceRef.current, message.sequence);
         applyRemotePlayback(message);
       }
     },
-    [applyRemotePlayback, roomId, videoId],
+    [applyRemotePlayback, roomId, sendSocketMessage, videoId],
   );
 
   useEffect(() => {
-    if (!startPlaybackSignal || !isHost || !playerReady) {
+    if (!startPlaybackSignal || !isHost) {
       return;
     }
 
-    playForEveryone();
-  }, [isHost, playForEveryone, playerReady, startPlaybackSignal]);
+    requestPlayForEveryone();
+  }, [isHost, requestPlayForEveryone, startPlaybackSignal]);
 
   useEffect(() => {
     let didUnmount = false;
@@ -721,6 +804,9 @@ export const SyncedYouTubePlayer = forwardRef<
           setSocketError(null);
           sendSocketMessage({ action: "joinRoom", roomId });
           sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
+          window.setTimeout(() => {
+            flushPendingPlayForEveryoneRef.current?.();
+          }, 0);
         };
         socket.onmessage = handleSocketEvent;
         socket.onerror = () => {
@@ -823,6 +909,17 @@ export const SyncedYouTubePlayer = forwardRef<
               applySavedVolumeToPlayer();
               refreshPlayerClock();
               sendSocketMessage({ action: "getPlaybackSnapshot", roomId });
+
+              window.setTimeout(() => {
+                const pendingEvent = pendingPlaybackEventRef.current;
+                pendingPlaybackEventRef.current = null;
+
+                if (pendingEvent) {
+                  applyRemotePlayback(pendingEvent);
+                }
+
+                flushPendingPlayForEveryoneRef.current?.();
+              }, 0);
             },
             onStateChange: (event) => {
               if (applyingRemoteRef.current) {
@@ -892,7 +989,9 @@ export const SyncedYouTubePlayer = forwardRef<
     };
   }, [
     applySavedVolumeToPlayer,
+    applyRemotePlayback,
     finishLocalSegmentPlayback,
+    finishApplyingLocalCommand,
     isHost,
     refreshPlayerClock,
     roomId,
@@ -942,15 +1041,37 @@ export const SyncedYouTubePlayer = forwardRef<
     }
 
     if (playbackState === "playing") {
-      player.pauseVideo();
-      setPlaybackState("paused");
-      sendPlaybackEvent("pause", "paused");
+      if (!sendPlaybackEvent("pause", "paused")) {
+        return;
+      }
+
+      applyingRemoteRef.current = true;
+      try {
+        player.pauseVideo();
+        setPlaybackState("paused");
+        playbackStateRef.current = "paused";
+      } catch {
+        // The next sync echo will correct the local player state if this fails.
+      } finally {
+        finishApplyingLocalCommand();
+      }
       return;
     }
 
-    player.playVideo();
-    setPlaybackState("playing");
-    sendPlaybackEvent("play", "playing");
+    if (!sendPlaybackEvent("play", "playing")) {
+      return;
+    }
+
+    applyingRemoteRef.current = true;
+    try {
+      player.playVideo();
+      setPlaybackState("playing");
+      playbackStateRef.current = "playing";
+    } catch {
+      // The next sync echo will correct the local player state if this fails.
+    } finally {
+      finishApplyingLocalCommand();
+    }
   };
 
   const seekTo = (nextPositionMs: number) => {
@@ -965,9 +1086,22 @@ export const SyncedYouTubePlayer = forwardRef<
       Math.min(nextPositionMs, durationMsRef.current || nextPositionMs),
     );
 
-    player.seekTo(boundedPositionMs / 1000, true);
-    setPositionMs(boundedPositionMs);
-    sendPlaybackEvent("seek", playbackStateRef.current, boundedPositionMs);
+    if (
+      !sendPlaybackEvent("seek", playbackStateRef.current, boundedPositionMs)
+    ) {
+      return;
+    }
+
+    applyingRemoteRef.current = true;
+    try {
+      player.seekTo(boundedPositionMs / 1000, true);
+      setPositionMs(boundedPositionMs);
+      positionMsRef.current = boundedPositionMs;
+    } catch {
+      // The next sync echo will correct the local player position if this fails.
+    } finally {
+      finishApplyingLocalCommand();
+    }
   };
 
   const handleSliderChange = (event: ChangeEvent<HTMLInputElement>) => {

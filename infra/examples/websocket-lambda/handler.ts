@@ -669,9 +669,14 @@ async function isRoomController(
   rolesChanged: boolean;
 }> {
   const ensured = await ensureRoomHasController(roomId);
+  const currentMember = ensured.members.find(
+    (member) => member.userId === userId,
+  );
   const isController =
     ensured.room?.hostUserId === userId ||
-    ensured.room?.coHostUserId === userId;
+    ensured.room?.coHostUserId === userId ||
+    currentMember?.role === "host" ||
+    currentMember?.role === "co-host";
 
   return {
     isController,
@@ -1140,20 +1145,20 @@ async function onSyncPlayback(
     });
   }
 
-  const latestSnapshot = await getLatestSnapshot(msg.roomId);
-  if (latestSnapshot && latestSnapshot.sequence >= msg.sequence) {
-    return response(409, { message: "Stale playback sequence" });
-  }
-
   if (await hasPlaybackEventId(msg.roomId, msg.eventId)) {
     return response(409, { message: "Duplicate playback event" });
   }
 
+  const latestSnapshot = await getLatestSnapshot(msg.roomId);
+  const nextSequence = Math.max(
+    msg.sequence,
+    (latestSnapshot?.sequence ?? 0) + 1,
+  );
   const updatedAt = nowIso();
   const snapshot: PlaybackSnapshotRecord = {
     roomId: msg.roomId,
     ...(msg.videoId ? { videoId: msg.videoId } : {}),
-    sequence: msg.sequence,
+    sequence: nextSequence,
     eventType: msg.eventType,
     state: msg.state,
     positionMs: msg.positionMs,
@@ -1197,12 +1202,7 @@ async function onSyncPlayback(
     sentAt: snapshot.sentAt,
   };
 
-  const delivered = await broadcastToRoom(
-    event,
-    msg.roomId,
-    outboundPayload,
-    connectionId,
-  );
+  const delivered = await broadcastToRoom(event, msg.roomId, outboundPayload);
 
   return response(200, { ok: true, route: "syncPlayback", delivered });
 }

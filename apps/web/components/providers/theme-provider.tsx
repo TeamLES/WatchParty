@@ -38,6 +38,23 @@ const getSystemTheme = (): "light" | "dark" => {
 const isTheme = (value: string | null): value is Theme =>
   value === "light" || value === "dark" || value === "system";
 
+const readStoredTheme = (): Theme | null => {
+  try {
+    const storedTheme = window.localStorage.getItem("theme");
+    return isTheme(storedTheme) ? storedTheme : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredTheme = (theme: Theme) => {
+  try {
+    window.localStorage.setItem("theme", theme);
+  } catch {
+    // Storage can be unavailable in private browsing or restricted contexts.
+  }
+};
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
@@ -48,8 +65,8 @@ export function ThemeProvider({
     React.useState<"light" | "dark">("light");
 
   React.useEffect(() => {
-    const storedTheme = window.localStorage.getItem("theme");
-    if (isTheme(storedTheme)) {
+    const storedTheme = readStoredTheme();
+    if (storedTheme) {
       setThemeState(storedTheme);
     }
   }, []);
@@ -87,7 +104,7 @@ export function ThemeProvider({
     }
 
     setThemeState(nextTheme);
-    window.localStorage.setItem("theme", nextTheme);
+    writeStoredTheme(nextTheme);
   }, []);
 
   const value = React.useMemo(

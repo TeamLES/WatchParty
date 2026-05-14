@@ -523,6 +523,19 @@ export default function RoomPage({
       return;
     }
 
+    if (id === activeVideoId && extractYoutubeId(room.videoUrl) === id) {
+      const didRequestPlayback =
+        socketPlayerRef.current?.requestPlayForEveryone() ?? false;
+
+      if (!didRequestPlayback) {
+        toast.error("Video sync is not ready yet");
+        return;
+      }
+
+      toast.success("Video started for everyone");
+      return;
+    }
+
     setIsUpdatingVideo(true);
 
     try {
