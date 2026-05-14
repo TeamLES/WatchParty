@@ -48,9 +48,7 @@ const formatWatchingLabel = (room: RoomSummaryResponse) => {
     return "No one watching";
   }
 
-  return watchingCount === 1
-    ? "1 watching"
-    : `${watchingCount} watching`;
+  return watchingCount === 1 ? "1 watching" : `${watchingCount} watching`;
 };
 
 const formatScheduledStart = (value: string | null) => {
@@ -387,7 +385,6 @@ export default function HubPage() {
       if (!response.ok) {
         const message = await response.text();
         console.warn("Failed to schedule room", response.status, message);
-        toast.error("Could not schedule party. Check the start and reminder time.");
         return;
       }
 
@@ -521,7 +518,9 @@ export default function HubPage() {
                 </p>
               </div>
             </div>
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isScheduleOpen ? "rotate-180" : ""}`}>
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isScheduleOpen ? "rotate-180" : ""}`}
+            >
               <ChevronDownIcon className="size-5" />
             </div>
           </div>
@@ -565,7 +564,9 @@ export default function HubPage() {
                     id="schedule-start"
                     type="datetime-local"
                     value={scheduleDateTime}
-                    onChange={(event) => setScheduleDateTime(event.target.value)}
+                    onChange={(event) =>
+                      setScheduleDateTime(event.target.value)
+                    }
                     required
                     className="h-11 rounded-xl"
                   />
@@ -584,7 +585,9 @@ export default function HubPage() {
                     max={500}
                     step={1}
                     value={scheduleMaxCapacity}
-                    onChange={(event) => setScheduleMaxCapacity(event.target.value)}
+                    onChange={(event) =>
+                      setScheduleMaxCapacity(event.target.value)
+                    }
                     placeholder="Unlimited"
                     className="h-11 rounded-xl"
                   />
@@ -631,7 +634,9 @@ export default function HubPage() {
                   <Input
                     id="schedule-video-url"
                     value={scheduleVideoUrl}
-                    onChange={(event) => setScheduleVideoUrl(event.target.value)}
+                    onChange={(event) =>
+                      setScheduleVideoUrl(event.target.value)
+                    }
                     placeholder="Optional YouTube URL"
                     className="h-11 rounded-xl"
                   />
@@ -646,7 +651,9 @@ export default function HubPage() {
                   <Input
                     id="schedule-description"
                     value={scheduleDescription}
-                    onChange={(event) => setScheduleDescription(event.target.value)}
+                    onChange={(event) =>
+                      setScheduleDescription(event.target.value)
+                    }
                     placeholder="Optional description"
                     className="h-11 rounded-xl"
                   />
@@ -700,7 +707,9 @@ export default function HubPage() {
                     id="schedule-password"
                     type="password"
                     value={schedulePassword}
-                    onChange={(event) => setSchedulePassword(event.target.value)}
+                    onChange={(event) =>
+                      setSchedulePassword(event.target.value)
+                    }
                     placeholder="Private access password"
                     required={scheduleIsPrivate}
                     disabled={!scheduleIsPrivate}
@@ -711,7 +720,9 @@ export default function HubPage() {
                 <Button
                   type="submit"
                   disabled={
-                    isScheduling || !scheduleTitle.trim() || Boolean(scheduleReminderError)
+                    isScheduling ||
+                    !scheduleTitle.trim() ||
+                    Boolean(scheduleReminderError)
                   }
                   className="h-11 rounded-xl px-5 md:col-start-4 md:justify-self-end"
                 >
@@ -780,8 +791,12 @@ export default function HubPage() {
                           <CalendarIcon className="size-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-muted-foreground text-xs uppercase tracking-wider">Date & Time</span>
-                          <span className="text-foreground">{formatScheduledStart(room.scheduledStartAt)}</span>
+                          <span className="text-muted-foreground text-xs uppercase tracking-wider">
+                            Date & Time
+                          </span>
+                          <span className="text-foreground">
+                            {formatScheduledStart(room.scheduledStartAt)}
+                          </span>
                         </div>
                       </div>
 
@@ -790,8 +805,14 @@ export default function HubPage() {
                           <UsersRoundIcon className="size-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-muted-foreground text-xs uppercase tracking-wider">Capacity</span>
-                          <span className="text-foreground">{room.maxCapacity ? `Max ${room.maxCapacity} people` : "Unlimited capacity"}</span>
+                          <span className="text-muted-foreground text-xs uppercase tracking-wider">
+                            Capacity
+                          </span>
+                          <span className="text-foreground">
+                            {room.maxCapacity
+                              ? `Max ${room.maxCapacity} people`
+                              : "Unlimited capacity"}
+                          </span>
                         </div>
                       </div>
 
@@ -800,8 +821,12 @@ export default function HubPage() {
                           <ClockIcon className="size-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-muted-foreground text-xs uppercase tracking-wider">Reminder</span>
-                          <span className="text-foreground">{room.reminderMinutesBefore ?? 30} min before</span>
+                          <span className="text-muted-foreground text-xs uppercase tracking-wider">
+                            Reminder
+                          </span>
+                          <span className="text-foreground">
+                            {room.reminderMinutesBefore ?? 30} min before
+                          </span>
                         </div>
                       </div>
                     </div>
