@@ -153,7 +153,7 @@ export default function RoomPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(false);
   const [isAttendeesOpen, setIsAttendeesOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
   const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
   const [isRefreshingHighlights, setIsRefreshingHighlights] = useState(false);
