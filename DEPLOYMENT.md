@@ -11,7 +11,8 @@ This guide deploys the current WatchParty monorepo as:
 The screenshots show these already exist in `eu-central-1`:
 
 - Cognito user pool `eu-central-1_6ohxnBvfL`
-- DynamoDB tables: `users`, `rooms`, `room-members`, `invites`, `chat-messages`, `highlights`, `websocket-connections`, `playback-snapshots`, `reaction-events`, `scheduled-parties`, `idempotency-events`
+- DynamoDB tables used by the current runtime: `rooms`, `room-members`, `invites`, `highlights`, `websocket-connections`, `playback-snapshots`
+- Existing legacy/planned tables such as `users`, `chat-messages`, `reaction-events`, `scheduled-parties`, and `idempotency-events` are not implemented in the current runtime; do not provision them for this deployment unless new code adds those flows.
 - API Gateway WebSocket API `watchparty-ws`
 - Lambda functions `watchparty-ws-router` and `watchparty-ws-authorizer`
 
@@ -77,17 +78,12 @@ PORT=3001
 AWS_REGION=eu-central-1
 ROOMS_REPOSITORY_DRIVER=dynamodb
 
-DDB_USERS_TABLE=users
 DDB_ROOMS_TABLE=rooms
 DDB_ROOM_MEMBERS_TABLE=room-members
 DDB_INVITES_TABLE=invites
-DDB_CHAT_MESSAGES_TABLE=chat-messages
 DDB_HIGHLIGHTS_TABLE=highlights
 DDB_WS_CONNECTIONS_TABLE=websocket-connections
 DDB_PLAYBACK_SNAPSHOTS_TABLE=playback-snapshots
-DDB_REACTION_EVENTS_TABLE=reaction-events
-DDB_SCHEDULED_PARTIES_TABLE=scheduled-parties
-DDB_IDEMPOTENCY_EVENTS_TABLE=idempotency-events
 
 COGNITO_USER_POOL_ID=eu-central-1_6ohxnBvfL
 COGNITO_APP_CLIENT_ID=<your-cognito-app-client-id>
@@ -273,28 +269,18 @@ Add inline policy:
         "dynamodb:Scan"
       ],
       "Resource": [
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/users",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/users/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/rooms",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/rooms/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/room-members",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/room-members/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/invites",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/invites/index/*",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/chat-messages",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/chat-messages/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/highlights/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/websocket-connections",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/websocket-connections/index/*",
         "arn:aws:dynamodb:eu-central-1:<account-id>:table/playback-snapshots",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/playback-snapshots/index/*",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/reaction-events",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/reaction-events/index/*",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/scheduled-parties",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/scheduled-parties/index/*",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/idempotency-events",
-        "arn:aws:dynamodb:eu-central-1:<account-id>:table/idempotency-events/index/*"
+        "arn:aws:dynamodb:eu-central-1:<account-id>:table/playback-snapshots/index/*"
       ]
     }
   ]
@@ -495,7 +481,7 @@ Redeploy Vercel after changing env vars.
 7. Viewer should sync.
 8. Send chat message.
 9. Send reaction.
-10. Reload viewer; it should reconnect and receive latest playback snapshot.
+10. Reload viewer; it should reconnect and receive latest playback snapshot. Chat messages and reactions are realtime broadcasts in the current runtime, not DynamoDB-persisted history.
 
 Watch logs:
 

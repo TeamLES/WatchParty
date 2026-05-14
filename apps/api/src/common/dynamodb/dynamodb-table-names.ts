@@ -5,17 +5,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 export const DYNAMODB_TABLE_ENV_KEYS = {
-  users: 'DDB_USERS_TABLE',
   rooms: 'DDB_ROOMS_TABLE',
   roomMembers: 'DDB_ROOM_MEMBERS_TABLE',
   invites: 'DDB_INVITES_TABLE',
-  chatMessages: 'DDB_CHAT_MESSAGES_TABLE',
   highlights: 'DDB_HIGHLIGHTS_TABLE',
   wsConnections: 'DDB_WS_CONNECTIONS_TABLE',
   playbackSnapshots: 'DDB_PLAYBACK_SNAPSHOTS_TABLE',
-  reactionEvents: 'DDB_REACTION_EVENTS_TABLE',
-  scheduledParties: 'DDB_SCHEDULED_PARTIES_TABLE',
-  idempotencyEvents: 'DDB_IDEMPOTENCY_EVENTS_TABLE',
 } as const;
 
 export type DynamoDbTableNameKey = keyof typeof DYNAMODB_TABLE_ENV_KEYS;
@@ -26,11 +21,9 @@ export function resolveDynamoDbTableNames(
   configService: ConfigService,
 ): DynamoDbTableNames {
   return {
-    users: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.users),
     rooms: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.rooms),
     roomMembers: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.roomMembers),
     invites: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.invites),
-    chatMessages: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.chatMessages),
     highlights: readEnv(configService, DYNAMODB_TABLE_ENV_KEYS.highlights),
     wsConnections: readEnv(
       configService,
@@ -39,18 +32,6 @@ export function resolveDynamoDbTableNames(
     playbackSnapshots: readEnv(
       configService,
       DYNAMODB_TABLE_ENV_KEYS.playbackSnapshots,
-    ),
-    reactionEvents: readEnv(
-      configService,
-      DYNAMODB_TABLE_ENV_KEYS.reactionEvents,
-    ),
-    scheduledParties: readEnv(
-      configService,
-      DYNAMODB_TABLE_ENV_KEYS.scheduledParties,
-    ),
-    idempotencyEvents: readEnv(
-      configService,
-      DYNAMODB_TABLE_ENV_KEYS.idempotencyEvents,
     ),
   };
 }
@@ -86,17 +67,12 @@ export function logDynamoDbTables(
   logger.log(
     [
       'dynamoTables=',
-      `users:${tableNames.users ?? '(unset)'}`,
       `rooms:${tableNames.rooms ?? '(unset)'}`,
       `roomMembers:${tableNames.roomMembers ?? '(unset)'}`,
       `invites:${tableNames.invites ?? '(unset)'}`,
-      `chatMessages:${tableNames.chatMessages ?? '(unset)'}`,
       `highlights:${tableNames.highlights ?? '(unset)'}`,
       `wsConnections:${tableNames.wsConnections ?? '(unset)'}`,
       `playbackSnapshots:${tableNames.playbackSnapshots ?? '(unset)'}`,
-      `reactionEvents:${tableNames.reactionEvents ?? '(unset)'}`,
-      `scheduledParties:${tableNames.scheduledParties ?? '(unset)'}`,
-      `idempotencyEvents:${tableNames.idempotencyEvents ?? '(unset)'}`,
     ].join(' '),
   );
 }

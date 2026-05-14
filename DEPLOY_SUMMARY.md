@@ -107,17 +107,12 @@ Key backend variables:
 PORT=3001
 AWS_REGION=eu-central-1
 ROOMS_REPOSITORY_DRIVER=dynamodb
-DDB_USERS_TABLE=users
 DDB_ROOMS_TABLE=rooms
 DDB_ROOM_MEMBERS_TABLE=room-members
 DDB_INVITES_TABLE=invites
-DDB_CHAT_MESSAGES_TABLE=chat-messages
 DDB_HIGHLIGHTS_TABLE=highlights
 DDB_WS_CONNECTIONS_TABLE=websocket-connections
 DDB_PLAYBACK_SNAPSHOTS_TABLE=playback-snapshots
-DDB_REACTION_EVENTS_TABLE=reaction-events
-DDB_SCHEDULED_PARTIES_TABLE=scheduled-parties
-DDB_IDEMPOTENCY_EVENTS_TABLE=idempotency-events
 COGNITO_USER_POOL_ID=eu-central-1_6ohxnBvfL
 COGNITO_APP_CLIENT_ID=<cognito-app-client-id>
 COGNITO_ISSUER=https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_6ohxnBvfL
@@ -223,21 +218,17 @@ Useful for debugging:
 Purpose:
 
 - Main database layer for WatchParty.
-- Stores users, rooms, memberships, messages, reactions, invites, and playback sync state.
+- Stores rooms, memberships, invites, highlights, WebSocket connection presence, and playback sync state.
+- Users are managed by Cognito. Chat messages and reactions are broadcast through WebSocket in the current runtime and are not persisted to DynamoDB.
 
 Tables used:
 
-- `users`
 - `rooms`
 - `room-members`
 - `invites`
-- `chat-messages`
 - `highlights`
 - `websocket-connections`
 - `playback-snapshots`
-- `reaction-events`
-- `scheduled-parties`
-- `idempotency-events`
 
 Used by:
 
@@ -325,7 +316,7 @@ Router responsibility:
 - Broadcasts playback sync events.
 - Broadcasts chat messages.
 - Broadcasts reactions.
-- Persists connection and playback state in DynamoDB.
+- Persists connection and playback state in DynamoDB. Chat messages and reactions are broadcast-only in the current runtime.
 
 ## Final Result
 
@@ -380,7 +371,8 @@ The deployed WatchParty application consists of:
    - Callback URLs were updated for the Vercel production domain.
 
 8. Database Layer
-   - DynamoDB stores users, rooms, members, messages, reactions, and playback snapshots.
+   - DynamoDB stores rooms, members, invites, highlights, WebSocket connections, and playback snapshots.
+   - Cognito stores users; chat messages and reactions are not persisted in the current runtime.
 
 9. Realtime Layer
    - API Gateway WebSocket handles live room events.
