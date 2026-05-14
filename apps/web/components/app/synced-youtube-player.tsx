@@ -280,6 +280,8 @@ export const SyncedYouTubePlayer = forwardRef<
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
 
+  const volumeContainerRef = useRef<HTMLDivElement>(null);
+
   const syncLabel = useMemo(() => {
     if (socketStatus === "connected") {
       return onlineCount === null ? "Live sync" : `Live sync (${onlineCount})`;
@@ -345,6 +347,25 @@ export const SyncedYouTubePlayer = forwardRef<
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [onFullscreenChange]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        volumeContainerRef.current &&
+        !volumeContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowVolume(false);
+      }
+    };
+
+    if (showVolume) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showVolume]);
 
   const readPositionMs = useCallback(() => {
     const player = playerRef.current;
@@ -1304,7 +1325,7 @@ export const SyncedYouTubePlayer = forwardRef<
             className="h-2 min-w-0 flex-1 cursor-pointer accent-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-45"
           />
 
-          <div className="relative flex items-center">
+          <div className="relative flex items-center" ref={volumeContainerRef}>
             <Button
               type="button"
               size="icon"

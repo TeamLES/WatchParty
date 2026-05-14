@@ -15,6 +15,8 @@ import {
   PanelRightCloseIcon,
   ShuffleIcon,
   UserCheckIcon,
+  UsersIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type {
@@ -149,7 +151,9 @@ export default function RoomPage({
     null,
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(true);
+  const [isFullscreenChatOpen, setIsFullscreenChatOpen] = useState(false);
+  const [isAttendeesOpen, setIsAttendeesOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [highlights, setHighlights] = useState<HighlightResponse[]>([]);
   const [isLoadingHighlights, setIsLoadingHighlights] = useState(false);
   const [isRefreshingHighlights, setIsRefreshingHighlights] = useState(false);
@@ -1467,64 +1471,94 @@ export default function RoomPage({
           {!isFullscreen && (
             <>
               {room.isScheduled && room.isController && (
-                <div className="glass-card panel-surface rounded-3xl p-4 shadow-lg">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Attendees</h2>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10 rounded-xl border-primary/20 bg-background/60 text-primary hover:bg-primary/10"
-                      onClick={() => void fetchAttendees()}
-                      title="Refresh attendees"
-                      aria-label="Refresh attendees"
-                    >
-                      <RefreshCwIcon className="size-4" />
-                    </Button>
+                <div className="glass-card panel-surface flex flex-col overflow-hidden shadow-lg rounded-3xl">
+                  <div
+                    className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10 cursor-pointer group"
+                    onClick={() => setIsAttendeesOpen((prev) => !prev)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <UsersIcon className="size-5 text-primary" />
+                      <h2 className="font-semibold text-lg text-foreground">
+                        Attendees
+                        <span className="ml-2 rounded-full border border-border/60 bg-background/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-white/10 dark:bg-black/20">
+                          {attendees.length}
+                        </span>
+                      </h2>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg border-primary/20 bg-background/60 text-primary hover:bg-primary/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void fetchAttendees();
+                        }}
+                        title="Refresh attendees"
+                        aria-label="Refresh attendees"
+                      >
+                        <RefreshCwIcon className="size-3.5" />
+                      </Button>
+                      <div className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isAttendeesOpen ? "rotate-180" : ""}`}>
+                        <ChevronDownIcon className="size-5" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {attendees.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No attendance responses yet.
-                      </p>
-                    ) : (
-                      attendees.map((member) => {
-                        const displayName = formatMemberDisplayName(member);
 
-                        return (
-                          <div
-                            key={member.userId}
-                            className="rounded-xl border border-border/50 bg-card/70 p-3 text-sm dark:border-white/5 dark:bg-black/20"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-medium">{displayName}</span>
-                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                                {formatAttendanceStatus(member.rsvpStatus)}
-                              </span>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {member.role === "host" && (
-                                <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                                  HOST
-                                </span>
-                              )}
-                              {member.role === "co-host" && (
-                                <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">
-                                  CO-HOST
-                                </span>
-                              )}
-                              <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                                {member.reminderEmailStatus === "sent"
-                                  ? "REMINDER SENT"
-                                  : member.reminderEmailStatus === "failed"
-                                    ? "REMINDER FAILED"
-                                    : "REMINDER PENDING"}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+                      isAttendeesOpen
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="space-y-2 p-4">
+                        {attendees.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No attendance responses yet.
+                          </p>
+                        ) : (
+                          attendees.map((member) => {
+                            const displayName = formatMemberDisplayName(member);
+
+                            return (
+                              <div
+                                key={member.userId}
+                                className="rounded-xl border border-border/50 bg-card/70 p-3 text-sm dark:border-white/5 dark:bg-black/20"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="font-medium">{displayName}</span>
+                                  <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                                    {formatAttendanceStatus(member.rsvpStatus)}
+                                  </span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {member.role === "host" && (
+                                    <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                                      HOST
+                                    </span>
+                                  )}
+                                  {member.role === "co-host" && (
+                                    <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500">
+                                      CO-HOST
+                                    </span>
+                                  )}
+                                  <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                                    {member.reminderEmailStatus === "sent"
+                                      ? "REMINDER SENT"
+                                      : member.reminderEmailStatus === "failed"
+                                        ? "REMINDER FAILED"
+                                        : "REMINDER PENDING"}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1550,83 +1584,102 @@ export default function RoomPage({
                 }
               />
 
-              <div className="glass-card panel-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl shadow-lg">
-                <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10">
+              <div className={`glass-card panel-surface flex min-h-0 flex-col overflow-hidden rounded-3xl shadow-lg transition-all duration-300 ${isChatOpen ? "flex-1" : "shrink-0"}`}>
+                <div
+                  className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10 cursor-pointer group"
+                  onClick={() => setIsChatOpen((prev) => !prev)}
+                >
                   <div className="flex items-center gap-2">
                     <MessageSquareTextIcon className="size-5 text-primary" />
-                    <h2 className="font-semibold text-lg">Room Chat</h2>
+                    <h2 className="font-semibold text-lg text-foreground">Room Chat</h2>
                   </div>
-                  <div className="flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-                    </span>
-                    Live
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                      </span>
+                      Live
+                    </div>
+                    <div className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isChatOpen ? "rotate-180" : ""}`}>
+                      <ChevronDownIcon className="size-5" />
+                    </div>
                   </div>
                 </div>
 
                 <div
-                  ref={chatContainerRef}
-                  className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
+                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out flex-1 min-h-0 ${
+                    isChatOpen
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0"
+                  }`}
+                  style={{ display: isChatOpen ? 'flex' : 'grid', flexDirection: 'column' }}
                 >
-                  {messages.map((msg) => (
+                  <div className={`flex flex-col overflow-hidden flex-1 ${!isChatOpen && 'invisible'}`}>
                     <div
-                      key={msg.id}
-                      className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                      ref={chatContainerRef}
+                      className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
                     >
-                      <div className="mb-1 flex items-baseline gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {msg.user}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground/60">
-                          {msg.time}
-                        </span>
-                      </div>
-                      <div
-                        className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
-                      >
-                        {msg.text}
-                      </div>
+                      {messages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${msg.isMe ? "items-end" : "items-start"}`}
+                        >
+                          <div className="mb-1 flex items-baseline gap-2">
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {msg.user}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/60">
+                              {msg.time}
+                            </span>
+                          </div>
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${msg.isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border/60 bg-card/80 text-foreground dark:border-white/10 dark:bg-white/10"}`}
+                          >
+                            {msg.text}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
-                  {EMOJI_LIST.map((emoji) => (
-                    <Button
-                      key={emoji}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleReaction(emoji)}
-                      className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
-                    >
-                      {emoji}
-                    </Button>
-                  ))}
-                </div>
+                    <div className="flex shrink-0 items-center justify-center gap-4 overflow-x-auto border-t border-border/50 bg-accent/30 px-4 py-2 dark:border-white/5 dark:bg-black/10">
+                      {EMOJI_LIST.map((emoji) => (
+                        <Button
+                          key={emoji}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReaction(emoji)}
+                          className="h-10 w-10 rounded-full p-0 text-xl transition-transform hover:scale-110 hover:bg-accent dark:hover:bg-white/10"
+                        >
+                          {emoji}
+                        </Button>
+                      ))}
+                    </div>
 
-                <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
-                  <form
-                    onSubmit={handleSendMessage}
-                    className="relative flex items-center"
-                  >
-                    <Input
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="Type a message..."
-                      className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-1 h-10 w-10 rounded-lg text-primary transition-colors hover:bg-primary/20 hover:text-primary"
-                      disabled={!newMessage.trim()}
-                    >
-                      <SendIcon className="size-4" />
-                    </Button>
-                  </form>
+                    <div className="shrink-0 bg-accent/30 p-4 pt-2 dark:bg-black/10">
+                      <form
+                        onSubmit={handleSendMessage}
+                        className="relative flex items-center"
+                      >
+                        <Input
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          placeholder="Type a message..."
+                          className="h-12 rounded-xl border-border/70 bg-background/75 pr-12 text-sm focus-visible:ring-primary/50 dark:border-white/10 dark:bg-black/20"
+                        />
+                        <Button
+                          type="submit"
+                          size="icon"
+                          variant="ghost"
+                          className="absolute right-1 h-10 w-10 rounded-lg text-primary transition-colors hover:bg-primary/20 hover:text-primary"
+                          disabled={!newMessage.trim()}
+                        >
+                          <SendIcon className="size-4" />
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
                 </div>
               </div>
             </>
