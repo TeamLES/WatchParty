@@ -335,6 +335,8 @@ test('host can create a scheduled party', async () => {
       scheduledStartAt,
       reminderMinutesBefore: 30,
       visibility: 'private',
+      password: 'secret123',
+      maxCapacity: 24,
     },
   );
 
@@ -345,6 +347,9 @@ test('host can create a scheduled party', async () => {
   assert.equal(response.reminderStatus, 'pending');
   assert.equal(response.inviteUrl, room?.appRoomUrl);
   assert.equal(room?.scheduledStartAt, scheduledStartAt);
+  assert.equal(room?.password, 'secret123');
+  assert.equal(response.maxCapacity, 24);
+  assert.equal(room?.maxCapacity, 24);
   assert.equal(hostMember?.role, 'host');
   assert.equal(hostMember?.rsvpStatus, 'going');
   assert.equal(hostMember?.email, 'host@example.com');
@@ -373,6 +378,50 @@ test('viewer can join a scheduled private party without a password', async () =>
   assert.equal(response.roomId, 'scheduled-private');
   assert.equal(response.userId, 'viewer');
   assert.equal(response.alreadyMember, false);
+});
+
+test('host can update video on a scheduled private party without a password', async () => {
+  repository.rooms.set('scheduled-private', {
+    roomId: 'scheduled-private',
+    title: 'Scheduled private room',
+    isPrivate: true,
+    visibilityStatus: 'private',
+    hostUserId: 'host',
+    coHostUserId: null,
+    activeWatcherCount: 1,
+    isScheduled: true,
+    scheduledStartAt: futureIso(120),
+    reminderAt: futureIso(90),
+    reminderMinutesBefore: 30,
+    reminderStatus: 'pending',
+    status: 'active',
+    createdAt: '2026-05-14T00:00:00.000Z',
+  });
+  repository.members.set(
+    'scheduled-private',
+    new Map<string, RoomMember>([
+      [
+        'host',
+        {
+          roomId: 'scheduled-private',
+          userId: 'host',
+          role: 'host',
+          joinedAt: '2026-05-14T00:00:00.000Z',
+          rsvpStatus: 'going',
+        },
+      ],
+    ]),
+  );
+
+  const response = await service.updateRoom('scheduled-private', 'host', {
+    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  });
+
+  assert.equal(response.videoUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(
+    repository.rooms.get('scheduled-private')?.videoUrl,
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  );
 });
 
 test('scheduledStartAt in the past fails', async () => {

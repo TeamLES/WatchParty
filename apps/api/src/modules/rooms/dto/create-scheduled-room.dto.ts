@@ -10,6 +10,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -60,10 +61,51 @@ export class CreateScheduledRoomDto {
   @Max(1440)
   reminderMinutesBefore?: number;
 
+  @ApiPropertyOptional({
+    example: 12,
+    minimum: 2,
+    maximum: 500,
+    description: 'Optional hard room capacity. Omit for an unlimited room.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      return trimmedValue.length > 0 ? Number(trimmedValue) : undefined;
+    }
+
+    return value;
+  })
+  @IsInt()
+  @Min(2)
+  @Max(500)
+  maxCapacity?: number;
+
   @ApiPropertyOptional({ example: 'private', enum: ['public', 'private'] })
   @IsOptional()
   @IsIn(['public', 'private'])
   visibility?: 'public' | 'private';
+
+  @ApiPropertyOptional({
+    example: 'watchparty123',
+    maxLength: 120,
+    description: 'Required when visibility is private.',
+  })
+  @ValidateIf(
+    (dto: CreateScheduledRoomDto) =>
+      dto.visibility === 'private' || dto.password !== undefined,
+  )
+  @IsString()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsNotEmpty()
+  @MaxLength(120)
+  password?: string;
 
   @ApiPropertyOptional({ example: 'Europe/Bratislava' })
   @IsOptional()

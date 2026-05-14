@@ -7,6 +7,7 @@ import {
   MessageSquareTextIcon,
   MonitorPlayIcon,
   PlayIcon,
+  RefreshCwIcon,
   SendIcon,
   SettingsIcon,
   Share2Icon,
@@ -97,6 +98,21 @@ function formatScheduledDateTime(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function formatAttendanceStatus(
+  status: RoomMemberResponse["rsvpStatus"] | null | undefined,
+): string {
+  switch (status) {
+    case "going":
+      return "Going";
+    case "not_going":
+      return "Not going";
+    case "maybe":
+      return "Maybe";
+    default:
+      return "No response";
+  }
 }
 
 export default function RoomPage({
@@ -515,14 +531,43 @@ export default function RoomPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoUrl }),
       });
+      const responseText = await res.text();
 
       if (!res.ok) {
-        console.error("Nepodarilo sa updatnúť videoUrl");
-        toast.error("Could not update the room video");
+        let details = "";
+        let message = "Could not start the video. Check the link and try again.";
+
+        try {
+          const errorBody = JSON.parse(responseText) as { message?: unknown };
+          if (typeof errorBody.message === "string") {
+            details = errorBody.message;
+          } else if (Array.isArray(errorBody.message)) {
+            details = errorBody.message.join(" ");
+          }
+        } catch {
+          if (responseText.trim()) {
+            details = responseText;
+          }
+        }
+
+        if (res.status === 403) {
+          message = "Only the host can start the video.";
+        } else if (details.toLowerCase().includes("url")) {
+          message = "Paste a valid YouTube URL and try again.";
+        } else if (res.status >= 500) {
+          message = "Video could not be started because the server is unavailable.";
+        }
+
+        console.error("Failed to update room video", res.status, responseText);
+        toast.error(message);
         return;
       }
 
-      // Aktulizacia prebehla uspesne
+      if (responseText) {
+        const updatedRoom = JSON.parse(responseText) as GetRoomResponse;
+        applyRoomSnapshot(updatedRoom, { notify: false });
+      }
+
       setActiveVideoId(id);
       setStartPlaybackSignal((value) => value + 1);
       toast.success("Video started for everyone");
@@ -556,8 +601,8 @@ export default function RoomPage({
 
       if (!res.ok) {
         const text = await res.text();
-        console.error("Failed to update RSVP", res.status, text);
-        toast.error("Could not update RSVP");
+        console.error("Failed to update attendance", res.status, text);
+        toast.error("Could not update attendance");
         return;
       }
 
@@ -589,10 +634,10 @@ export default function RoomPage({
           }
         : roomRef.current;
       await fetchAttendees();
-      toast.success("RSVP updated");
+      toast.success("Attendance updated");
     } catch (error) {
       console.error(error);
-      toast.error("Could not update RSVP");
+      toast.error("Could not update attendance");
     } finally {
       setIsUpdatingRsvp(false);
     }
@@ -676,6 +721,13 @@ export default function RoomPage({
     },
     [applyRoomSnapshot, currentUserId],
   );
+
+  const handleOnlineCountChange = useCallback((onlineCount: number | null) => {
+    setRoom((prev) => (prev ? { ...prev, onlineCount } : prev));
+    roomRef.current = roomRef.current
+      ? { ...roomRef.current, onlineCount }
+      : roomRef.current;
+  }, []);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -1078,16 +1130,20 @@ export default function RoomPage({
 
   const canControlPlayback = room.isController;
   const canManageRoomVideo = room.isHost;
-  const watchingCount = room.activeWatcherCount;
+  const watchingCount = Math.max(
+    room.activeWatcherCount,
+    room.onlineCount ?? 0,
+    room.isMember ? 1 : 0,
+  );
   const highlightPreviewEndMs =
     highlightCapturePositionMs ?? lastKnownPositionMs;
 
   return (
     <div className="page-surface relative min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.18),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.14),transparent_40%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.12),transparent_50%)] pt-4 font-sans text-foreground dark:bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,0.2),transparent_34%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(circle_at_50%_95%,rgba(192,132,252,0.14),transparent_52%)]">
       {/* Main Workspace */}
-      <main className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 px-4 sm:px-6 pb-6 lg:overflow-hidden lg:max-h-[calc(100vh-4rem-1rem)]">
+      <main className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 sm:gap-6 sm:px-6 lg:h-[calc(100vh-4rem-1rem)] lg:flex-row lg:overflow-hidden">
         {/* Video Column (Main Content) */}
-        <section className="flex-1 flex flex-col gap-4 min-w-0">
+        <section className="flex min-h-0 flex-1 flex-col gap-4 min-w-0">
           {/* Integrated Room Info Bar */}
           <div className="glass-card panel-surface flex shrink-0 flex-col gap-4 rounded-2xl p-4 shadow-sm">
             {/* Top row: Title and Actions */}
@@ -1256,7 +1312,7 @@ export default function RoomPage({
           </div>
 
           {/* Video Player */}
-          <div className="glass-card panel-surface relative min-h-[50vh] flex-1 overflow-hidden rounded-3xl shadow-2xl lg:min-h-0 xl:min-h-168">
+          <div className="glass-card panel-surface relative min-h-[22rem] flex-1 overflow-hidden rounded-3xl shadow-2xl lg:min-h-0">
             <SyncedYouTubePlayer
               ref={socketPlayerRef}
               roomId={roomId}
@@ -1269,6 +1325,7 @@ export default function RoomPage({
               }}
               onChatEvent={handleChatEvent}
               onRoomRoleUpdated={handleRoomRoleUpdated}
+              onOnlineCountChange={handleOnlineCountChange}
               onFullscreenChange={setIsFullscreen}
             >
               {/* Flying Emojis */}
@@ -1402,18 +1459,20 @@ export default function RoomPage({
                     <h2 className="text-lg font-semibold">Attendees</h2>
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-xl border-primary/20 bg-background/60 text-primary hover:bg-primary/10"
                       onClick={() => void fetchAttendees()}
+                      title="Refresh attendees"
+                      aria-label="Refresh attendees"
                     >
-                      Refresh
+                      <RefreshCwIcon className="size-4" />
                     </Button>
                   </div>
                   <div className="space-y-2">
                     {attendees.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        No RSVPs yet.
+                        No attendance responses yet.
                       </p>
                     ) : (
                       attendees.map((member) => {
@@ -1426,8 +1485,8 @@ export default function RoomPage({
                           >
                             <div className="flex items-center justify-between gap-3">
                               <span className="font-medium">{displayName}</span>
-                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-bold uppercase text-muted-foreground">
-                                {member.rsvpStatus ?? "none"}
+                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                                {formatAttendanceStatus(member.rsvpStatus)}
                               </span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1702,8 +1761,8 @@ export default function RoomPage({
               <label className="text-sm font-semibold text-muted-foreground">
                 Active Watchers (
                 {room?.maxCapacity === null
-                  ? room?.activeWatcherCount
-                  : `${room?.activeWatcherCount} / ${room?.maxCapacity}`}
+                  ? watchingCount
+                  : `${watchingCount} / ${room?.maxCapacity}`}
                 )
               </label>
               {room?.isHost && (

@@ -83,6 +83,20 @@ export class RoomsService {
     }
 
     const isPrivate = createScheduledRoomDto.visibility === 'private';
+    const password = createScheduledRoomDto.password;
+
+    if (isPrivate && !password) {
+      throw new BadRequestException(
+        'password is required when visibility is private',
+      );
+    }
+
+    if (!isPrivate && password) {
+      throw new BadRequestException(
+        'password can be provided only when visibility is private',
+      );
+    }
+
     const createdAt = this.nowIsoString();
     const roomId = this.generateRoomId();
     const roomUrl = this.buildRoomUrl(roomId);
@@ -93,9 +107,13 @@ export class RoomsService {
         ? { videoUrl: createScheduledRoomDto.videoUrl }
         : {}),
       isPrivate,
+      ...(password ? { password } : {}),
       visibilityStatus: isPrivate ? 'private' : 'public',
       hostUserId: userId,
       coHostUserId: null,
+      ...(createScheduledRoomDto.maxCapacity !== undefined
+        ? { maxCapacity: createScheduledRoomDto.maxCapacity }
+        : {}),
       activeWatcherCount: 0,
       isScheduled: true,
       scheduledStartAt: scheduledStartAt.toISOString(),
@@ -212,7 +230,7 @@ export class RoomsService {
     const isPrivate = updateRoomDto.isPrivate ?? room.isPrivate;
     const password = updateRoomDto.password ?? room.password;
 
-    if (isPrivate && !password) {
+    if (isPrivate && !password && !room.isScheduled) {
       throw new BadRequestException(
         'password is required when isPrivate is true',
       );

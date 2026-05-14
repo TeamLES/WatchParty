@@ -21,7 +21,7 @@ export default function JoinRoomPage({
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  const requiresPassword = room?.isPrivate === true && !room.isScheduled;
+  const requiresPassword = room?.isPrivate === true && Boolean(room.password);
 
   useEffect(() => {
     async function fetchRoom() {

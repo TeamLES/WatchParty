@@ -52,6 +52,47 @@ const formatScheduledStart = (value: string | null) => {
   });
 };
 
+const REMINDER_SEND_BUFFER_MS = 60_000;
+
+const getScheduleReminderError = (
+  scheduleDateTime: string,
+  reminderMinutes: string,
+): string | null => {
+  if (!scheduleDateTime || !reminderMinutes.trim()) {
+    return null;
+  }
+
+  const startAt = new Date(scheduleDateTime);
+  if (Number.isNaN(startAt.getTime())) {
+    return null;
+  }
+
+  const parsedReminder = Number(reminderMinutes);
+  if (
+    !Number.isInteger(parsedReminder) ||
+    parsedReminder < 1 ||
+    parsedReminder > 1440
+  ) {
+    return "Use 1-1440 minutes.";
+  }
+
+  const maxReminderMinutes = Math.floor(
+    (startAt.getTime() - Date.now() - REMINDER_SEND_BUFFER_MS) / 60_000,
+  );
+
+  if (maxReminderMinutes < 1) {
+    return "Start time is too soon.";
+  }
+
+  if (parsedReminder > maxReminderMinutes) {
+    return `Max ${maxReminderMinutes} ${
+      maxReminderMinutes === 1 ? "minute" : "minutes"
+    } before start.`;
+  }
+
+  return null;
+};
+
 export default function HubPage() {
   const router = useRouter();
   const [rooms, setRooms] = useState<RoomSummaryResponse[]>([]);
@@ -113,16 +154,29 @@ export default function HubPage() {
   const [scheduleDescription, setScheduleDescription] = useState("");
   const [scheduleVideoUrl, setScheduleVideoUrl] = useState("");
   const [scheduleDateTime, setScheduleDateTime] = useState("");
+  const [scheduleMaxCapacity, setScheduleMaxCapacity] = useState("");
   const [scheduleReminderMinutes, setScheduleReminderMinutes] = useState("30");
+  const [scheduleIsPrivate, setScheduleIsPrivate] = useState(false);
+  const [schedulePassword, setSchedulePassword] = useState("");
   const [isScheduling, setIsScheduling] = useState(false);
+
+  const nowMs = Date.now();
+  const isUpcomingScheduledRoom = (room: RoomSummaryResponse) =>
+    room.isScheduled &&
+    room.scheduledStartAt !== null &&
+    new Date(room.scheduledStartAt).getTime() > nowMs;
+  const getRoomDisplayTitle = (room: RoomSummaryResponse) =>
+    room.scheduledTitle ?? room.title;
 
   const searchedRooms = rooms.filter(
     (room) =>
-      !room.isScheduled &&
-      room.title.toLowerCase().includes(searchQuery.toLowerCase()),
+      !isUpcomingScheduledRoom(room) &&
+      getRoomDisplayTitle(room)
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
   );
   const scheduledRooms = rooms
-    .filter((room) => room.isScheduled)
+    .filter(isUpcomingScheduledRoom)
     .sort((a, b) =>
       (a.scheduledStartAt ?? a.createdAt).localeCompare(
         b.scheduledStartAt ?? b.createdAt,
@@ -146,6 +200,10 @@ export default function HubPage() {
     { label: "Active", value: "active" },
     { label: "Empty", value: "empty" },
   ];
+  const scheduleReminderError = getScheduleReminderError(
+    scheduleDateTime,
+    scheduleReminderMinutes,
+  );
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,30 +290,75 @@ export default function HubPage() {
       return;
     }
 
+    const reminderError = getScheduleReminderError(
+      scheduleDateTime,
+      scheduleReminderMinutes,
+    );
+    if (reminderError) {
+      toast.warning(reminderError);
+      return;
+    }
+
+    if (scheduleIsPrivate && !schedulePassword.trim()) {
+      toast.warning("Add a password for private access");
+      return;
+    }
+
     setIsScheduling(true);
 
     try {
+      const payload: {
+        title: string;
+        description?: string;
+        videoUrl?: string;
+        scheduledStartAt: string;
+        reminderMinutesBefore: number;
+        visibility: "public" | "private";
+        password?: string;
+        scheduledTimezone?: string;
+        maxCapacity?: number;
+      } = {
+        title: scheduleTitle.trim(),
+        description: scheduleDescription.trim() || undefined,
+        videoUrl: scheduleVideoUrl.trim() || undefined,
+        scheduledStartAt: startAt.toISOString(),
+        reminderMinutesBefore: Number(scheduleReminderMinutes) || 30,
+        visibility: scheduleIsPrivate ? "private" : "public",
+        scheduledTimezone:
+          Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+      };
+
+      if (scheduleIsPrivate) {
+        payload.password = schedulePassword.trim();
+      }
+
+      const normalizedCapacity = scheduleMaxCapacity.trim();
+      if (normalizedCapacity) {
+        const parsedCapacity = Number(normalizedCapacity);
+        if (
+          !Number.isInteger(parsedCapacity) ||
+          parsedCapacity < 2 ||
+          parsedCapacity > 500
+        ) {
+          toast.warning("Room capacity must be an integer between 2 and 500.");
+          return;
+        }
+
+        payload.maxCapacity = parsedCapacity;
+      }
+
       const response = await fetch("/api/rooms/scheduled", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          title: scheduleTitle.trim(),
-          description: scheduleDescription.trim() || undefined,
-          videoUrl: scheduleVideoUrl.trim() || undefined,
-          scheduledStartAt: startAt.toISOString(),
-          reminderMinutesBefore: Number(scheduleReminderMinutes) || 30,
-          visibility: "private",
-          scheduledTimezone:
-            Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const message = await response.text();
-        console.error("Failed to schedule room", response.status, message);
-        toast.error("Could not schedule party");
+        console.warn("Failed to schedule room", response.status, message);
+        toast.error("Could not schedule party. Check the start and reminder time.");
         return;
       }
 
@@ -381,59 +484,194 @@ export default function HubPage() {
                 Schedule a Party
               </h2>
               <p className="text-sm text-muted-foreground">
-                Plan ahead and send reminders to guests who RSVP.
+                Plan ahead and send reminders to guests who are going.
               </p>
             </div>
           </div>
 
           <form
             onSubmit={handleScheduleRoom}
-            className="grid gap-3 md:grid-cols-[1.4fr_1fr_0.6fr_auto]"
+            className="grid gap-3 md:grid-cols-[1.4fr_1fr_0.65fr_0.7fr] md:items-start"
           >
-            <Input
-              value={scheduleTitle}
-              onChange={(event) => setScheduleTitle(event.target.value)}
-              placeholder="Movie night"
-              required
-              className="h-11 rounded-xl"
-            />
-            <Input
-              type="datetime-local"
-              value={scheduleDateTime}
-              onChange={(event) => setScheduleDateTime(event.target.value)}
-              required
-              className="h-11 rounded-xl"
-            />
-            <Input
-              type="number"
-              min={1}
-              max={1440}
-              value={scheduleReminderMinutes}
-              onChange={(event) =>
-                setScheduleReminderMinutes(event.target.value)
-              }
-              className="h-11 rounded-xl"
-              aria-label="Reminder minutes before start"
-            />
+            <div className="space-y-1.5 md:min-h-[5.25rem]">
+              <label
+                htmlFor="schedule-title"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Party title
+              </label>
+              <Input
+                id="schedule-title"
+                value={scheduleTitle}
+                onChange={(event) => setScheduleTitle(event.target.value)}
+                placeholder="Movie night"
+                required
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5 md:min-h-[5.25rem]">
+              <label
+                htmlFor="schedule-start"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Start date and time
+              </label>
+              <Input
+                id="schedule-start"
+                type="datetime-local"
+                value={scheduleDateTime}
+                onChange={(event) => setScheduleDateTime(event.target.value)}
+                required
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5 md:min-h-[5.25rem]">
+              <label
+                htmlFor="schedule-capacity"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Capacity
+              </label>
+              <Input
+                id="schedule-capacity"
+                type="number"
+                min={2}
+                max={500}
+                step={1}
+                value={scheduleMaxCapacity}
+                onChange={(event) => setScheduleMaxCapacity(event.target.value)}
+                placeholder="Unlimited"
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5 md:min-h-[5.25rem]">
+              <label
+                htmlFor="schedule-reminder"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Reminder minutes
+              </label>
+              <Input
+                id="schedule-reminder"
+                type="number"
+                min={1}
+                max={1440}
+                aria-invalid={Boolean(scheduleReminderError)}
+                aria-describedby="schedule-reminder-error"
+                value={scheduleReminderMinutes}
+                onChange={(event) =>
+                  setScheduleReminderMinutes(event.target.value)
+                }
+                className={`h-11 rounded-xl ${
+                  scheduleReminderError
+                    ? "border-destructive focus-visible:ring-destructive/40"
+                    : ""
+                }`}
+              />
+              <p
+                id="schedule-reminder-error"
+                className="min-h-4 truncate px-1 text-xs font-medium text-destructive"
+                title={scheduleReminderError ?? undefined}
+              >
+                {scheduleReminderError ?? ""}
+              </p>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label
+                htmlFor="schedule-video-url"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                YouTube URL
+              </label>
+              <Input
+                id="schedule-video-url"
+                value={scheduleVideoUrl}
+                onChange={(event) => setScheduleVideoUrl(event.target.value)}
+                placeholder="Optional YouTube URL"
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label
+                htmlFor="schedule-description"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Description
+              </label>
+              <Input
+                id="schedule-description"
+                value={scheduleDescription}
+                onChange={(event) => setScheduleDescription(event.target.value)}
+                placeholder="Optional description"
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <span className="px-1 text-xs font-semibold text-muted-foreground">
+                Access
+              </span>
+              <div className="flex h-11 rounded-xl border border-border/70 bg-background/70 p-1 dark:border-white/10 dark:bg-black/20">
+                <button
+                  type="button"
+                  onClick={() => setScheduleIsPrivate(false)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                    !scheduleIsPrivate
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-accent/70 hover:text-foreground dark:hover:bg-white/10"
+                  }`}
+                >
+                  <GlobeIcon className="size-4" />
+                  Public
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleIsPrivate(true)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                    scheduleIsPrivate
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-muted-foreground hover:bg-accent/70 hover:text-foreground dark:hover:bg-white/10"
+                  }`}
+                >
+                  <LockIcon className="size-4" />
+                  Private
+                </button>
+              </div>
+            </div>
+            <div
+              aria-hidden={!scheduleIsPrivate}
+              className={`space-y-1.5 transition-opacity ${
+                scheduleIsPrivate
+                  ? "opacity-100"
+                  : "pointer-events-none opacity-0"
+              }`}
+            >
+              <label
+                htmlFor="schedule-password"
+                className="px-1 text-xs font-semibold text-muted-foreground"
+              >
+                Password
+              </label>
+              <Input
+                id="schedule-password"
+                type="password"
+                value={schedulePassword}
+                onChange={(event) => setSchedulePassword(event.target.value)}
+                placeholder="Private access password"
+                required={scheduleIsPrivate}
+                disabled={!scheduleIsPrivate}
+                tabIndex={scheduleIsPrivate ? 0 : -1}
+                className="h-11 rounded-xl"
+              />
+            </div>
             <Button
               type="submit"
-              disabled={isScheduling || !scheduleTitle.trim()}
-              className="h-11 rounded-xl px-5"
+              disabled={
+                isScheduling || !scheduleTitle.trim() || Boolean(scheduleReminderError)
+              }
+              className="h-11 rounded-xl px-5 md:col-start-4 md:justify-self-end"
             >
               {isScheduling ? "Scheduling..." : "Schedule Party"}
             </Button>
-            <Input
-              value={scheduleVideoUrl}
-              onChange={(event) => setScheduleVideoUrl(event.target.value)}
-              placeholder="Optional YouTube URL"
-              className="h-11 rounded-xl md:col-span-2"
-            />
-            <Input
-              value={scheduleDescription}
-              onChange={(event) => setScheduleDescription(event.target.value)}
-              placeholder="Optional description"
-              className="h-11 rounded-xl md:col-span-2"
-            />
           </form>
         </section>
 
@@ -444,7 +682,7 @@ export default function HubPage() {
                 Scheduled Parties
               </h3>
               <p className="mt-1 text-sm font-medium text-muted-foreground">
-                Upcoming planned sessions everyone can join.
+                Upcoming planned sessions sorted by start time.
               </p>
             </div>
           </div>
@@ -501,9 +739,13 @@ export default function HubPage() {
                     </div>
 
                     <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-4 dark:border-white/5">
-                      <span className="text-xs font-semibold uppercase text-muted-foreground">
-                        {room.isPrivate ? "Private invite" : "Public"}
-                      </span>
+                      {room.isPrivate ? (
+                        <span className="text-xs font-semibold uppercase text-muted-foreground">
+                          Private access
+                        </span>
+                      ) : (
+                        <span />
+                      )}
                       <Button
                         size="sm"
                         variant="secondary"
@@ -624,7 +866,7 @@ export default function HubPage() {
 
                     <CardContent className="p-5 flex-1 flex flex-col pt-8">
                       <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
-                        {room.title}
+                        {getRoomDisplayTitle(room)}
                       </h3>
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 mb-6 font-medium">
                         <UsersRoundIcon className="size-4 opacity-70" />{" "}
