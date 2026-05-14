@@ -66,6 +66,7 @@ interface YouTubePlayerEvent {
 }
 
 interface YouTubePlayer {
+  cueVideoById(videoId: string): void;
   destroy(): void;
   getCurrentTime(): number;
   getDuration(): number;
@@ -126,16 +127,30 @@ function loadYouTubeIframeApi(): Promise<YouTubeApi> {
 
   youtubeApiPromise = new Promise((resolve, reject) => {
     const previousCallback = window.onYouTubeIframeAPIReady;
+    let resolved = false;
 
-    window.onYouTubeIframeAPIReady = () => {
-      previousCallback?.();
+    const resolveWhenReady = (startedAt = Date.now()) => {
+      if (resolved) {
+        return;
+      }
 
       if (window.YT?.Player) {
+        resolved = true;
         resolve(window.YT);
         return;
       }
 
-      reject(new Error("YouTube API did not initialize"));
+      if (Date.now() - startedAt > 10_000) {
+        reject(new Error("YouTube API did not initialize"));
+        return;
+      }
+
+      window.setTimeout(() => resolveWhenReady(startedAt), 50);
+    };
+
+    window.onYouTubeIframeAPIReady = () => {
+      previousCallback?.();
+      resolveWhenReady();
     };
 
     const existingScript = document.querySelector<HTMLScriptElement>(
@@ -143,6 +158,8 @@ function loadYouTubeIframeApi(): Promise<YouTubeApi> {
     );
 
     if (existingScript) {
+      existingScript.addEventListener("load", () => resolveWhenReady());
+      resolveWhenReady();
       return;
     }
 
@@ -151,6 +168,11 @@ function loadYouTubeIframeApi(): Promise<YouTubeApi> {
     script.async = true;
     script.onerror = () => reject(new Error("Failed to load YouTube API"));
     document.head.appendChild(script);
+  });
+
+  youtubeApiPromise = youtubeApiPromise.catch((error) => {
+    youtubeApiPromise = null;
+    throw error;
   });
 
   return youtubeApiPromise;
@@ -171,11 +193,20 @@ function createEventId(): string {
 }
 
 function formatTime(milliseconds: number): string {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const safeMilliseconds = Number.isFinite(milliseconds) ? milliseconds : 0;
+  const totalSeconds = Math.max(0, Math.floor(safeMilliseconds / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
 
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function secondsToMilliseconds(value: number, fallbackMs = 0): number {
+  if (!Number.isFinite(value)) {
+    return fallbackMs;
+  }
+
+  return Math.max(0, Math.round(value * 1000));
 }
 
 function parseSocketEvent(
@@ -318,7 +349,7 @@ export const SyncedYouTubePlayer = forwardRef<
     }
 
     try {
-      return Math.max(0, Math.round(player.getCurrentTime() * 1000));
+      return secondsToMilliseconds(player.getCurrentTime(), positionMsRef.current);
     } catch {
       return positionMsRef.current;
     }
@@ -332,17 +363,19 @@ export const SyncedYouTubePlayer = forwardRef<
     }
 
     try {
-      const nextPositionMs = Math.max(
-        0,
-        Math.round(player.getCurrentTime() * 1000),
+      const nextPositionMs = secondsToMilliseconds(
+        player.getCurrentTime(),
+        positionMsRef.current,
       );
-      const nextDurationMs = Math.max(
-        0,
-        Math.round(player.getDuration() * 1000),
+      const nextDurationMs = secondsToMilliseconds(
+        player.getDuration(),
+        durationMsRef.current,
       );
 
       setPositionMs(nextPositionMs);
       setDurationMs(nextDurationMs);
+      positionMsRef.current = nextPositionMs;
+      durationMsRef.current = nextDurationMs;
     } catch {
       // The player can briefly throw while the iframe is switching videos.
     }
@@ -784,6 +817,7 @@ export const SyncedYouTubePlayer = forwardRef<
                 return;
               }
 
+              playerRef.current?.cueVideoById(videoId);
               playerReadyRef.current = true;
               setPlayerReady(true);
               applySavedVolumeToPlayer();
@@ -1047,6 +1081,11 @@ export const SyncedYouTubePlayer = forwardRef<
       : volume < 50
         ? Volume1Icon
         : Volume2Icon;
+  const safeDurationMs =
+    Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 0;
+  const safePositionMs =
+    Number.isFinite(positionMs) && positionMs > 0 ? positionMs : 0;
+  const sliderMaxMs = Math.max(safeDurationMs, 1);
 
   if (!videoId) {
     return (
@@ -1120,9 +1159,9 @@ export const SyncedYouTubePlayer = forwardRef<
           <input
             type="range"
             min={0}
-            max={Math.max(durationMs, 1)}
+            max={sliderMaxMs}
             step={1000}
-            value={Math.min(positionMs, Math.max(durationMs, 1))}
+            value={Math.min(safePositionMs, sliderMaxMs)}
             onChange={handleSliderChange}
             onPointerUp={commitSliderSeek}
             onKeyUp={handleSliderKeyUp}

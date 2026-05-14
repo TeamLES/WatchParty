@@ -57,8 +57,9 @@ const REMINDER_SEND_BUFFER_MS = 60_000;
 const getScheduleReminderError = (
   scheduleDateTime: string,
   reminderMinutes: string,
+  nowMs: number | null,
 ): string | null => {
-  if (!scheduleDateTime || !reminderMinutes.trim()) {
+  if (!scheduleDateTime || !reminderMinutes.trim() || nowMs === null) {
     return null;
   }
 
@@ -77,7 +78,7 @@ const getScheduleReminderError = (
   }
 
   const maxReminderMinutes = Math.floor(
-    (startAt.getTime() - Date.now() - REMINDER_SEND_BUFFER_MS) / 60_000,
+    (startAt.getTime() - nowMs - REMINDER_SEND_BUFFER_MS) / 60_000,
   );
 
   if (maxReminderMinutes < 1) {
@@ -158,13 +159,14 @@ export default function HubPage() {
   const [scheduleReminderMinutes, setScheduleReminderMinutes] = useState("30");
   const [scheduleIsPrivate, setScheduleIsPrivate] = useState(false);
   const [schedulePassword, setSchedulePassword] = useState("");
+  const [currentTimeMs, setCurrentTimeMs] = useState<number | null>(null);
   const [isScheduling, setIsScheduling] = useState(false);
 
-  const nowMs = Date.now();
   const isUpcomingScheduledRoom = (room: RoomSummaryResponse) =>
     room.isScheduled &&
     room.scheduledStartAt !== null &&
-    new Date(room.scheduledStartAt).getTime() > nowMs;
+    (currentTimeMs === null ||
+      new Date(room.scheduledStartAt).getTime() > currentTimeMs);
   const getRoomDisplayTitle = (room: RoomSummaryResponse) =>
     room.scheduledTitle ?? room.title;
 
@@ -203,7 +205,20 @@ export default function HubPage() {
   const scheduleReminderError = getScheduleReminderError(
     scheduleDateTime,
     scheduleReminderMinutes,
+    currentTimeMs,
   );
+
+  useEffect(() => {
+    setCurrentTimeMs(Date.now());
+
+    const intervalId = window.setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 30_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,6 +308,7 @@ export default function HubPage() {
     const reminderError = getScheduleReminderError(
       scheduleDateTime,
       scheduleReminderMinutes,
+      Date.now(),
     );
     if (reminderError) {
       toast.warning(reminderError);
