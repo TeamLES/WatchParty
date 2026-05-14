@@ -495,6 +495,9 @@ export class RoomsService {
       ...(existingMember?.reminderEmailError
         ? { reminderEmailError: existingMember.reminderEmailError }
         : {}),
+      ...(existingMember?.reminderEmailMessageId
+        ? { reminderEmailMessageId: existingMember.reminderEmailMessageId }
+        : {}),
     };
 
     let updatedMember: RoomMember | null;
@@ -777,6 +780,7 @@ export class RoomsService {
       reminderEmailSentAt: member.reminderEmailSentAt ?? null,
       reminderEmailStatus: member.reminderEmailStatus ?? null,
       reminderEmailError: member.reminderEmailError ?? null,
+      reminderEmailMessageId: member.reminderEmailMessageId ?? null,
     };
   }
 
@@ -827,8 +831,12 @@ export class RoomsService {
   }
 
   private buildRoomUrl(roomId: string): string {
-    const baseUrl =
+    let baseUrl =
       process.env.APP_BASE_URL?.replace(/\/+$/g, '') ?? 'http://localhost:3000';
+
+    if (baseUrl.endsWith('/hub')) {
+      baseUrl = baseUrl.slice(0, -4);
+    }
 
     return `${baseUrl}/room/${roomId}`;
   }

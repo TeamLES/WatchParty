@@ -2,7 +2,7 @@ export type RoomStatus = "active" | "ended";
 
 export type RoomMemberRole = "host" | "co-host" | "viewer";
 export type RoomMemberRsvpStatus = "going" | "not_going" | "maybe" | "none";
-export type RoomMemberReminderEmailStatus = "sent" | "failed";
+export type RoomMemberReminderEmailStatus = "sent" | "skipped" | "failed";
 export type ScheduledReminderStatus = "pending" | "sending" | "sent" | "failed";
 
 export interface RoomMemberResponse {
@@ -16,6 +16,7 @@ export interface RoomMemberResponse {
   reminderEmailSentAt?: string | null;
   reminderEmailStatus?: RoomMemberReminderEmailStatus | null;
   reminderEmailError?: string | null;
+  reminderEmailMessageId?: string | null;
 }
 
 export interface RoomSummaryResponse {

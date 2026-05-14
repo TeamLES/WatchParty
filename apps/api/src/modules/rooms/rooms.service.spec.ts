@@ -190,9 +190,13 @@ class FakeScheduledPartyEmailService {
 
   sendScheduledPartyReminderEmail(
     params: SendScheduledPartyReminderEmailParams,
-  ): Promise<void> {
+  ): Promise<{ delivered: boolean; provider: 'ses'; messageId: string }> {
     this.sent.push(params);
-    return Promise.resolve();
+    return Promise.resolve({
+      delivered: true,
+      provider: 'ses',
+      messageId: `message-${this.sent.length}`,
+    });
   }
 }
 
@@ -593,6 +597,10 @@ test('reminder worker sends only RSVP going members and marks room sent', async 
     'sent',
   );
   assert.equal(
+    repository.members.get('scheduled-2')?.get('going')?.reminderEmailMessageId,
+    'message-1',
+  );
+  assert.equal(
     repository.members.get('scheduled-2')?.get('maybe')?.reminderEmailStatus,
     undefined,
   );
@@ -660,13 +668,15 @@ test('SES email service logs in dev mode when sender is not configured', async (
     },
   } as never);
 
-  await emailService.sendScheduledPartyReminderEmail({
+  const result = await emailService.sendScheduledPartyReminderEmail({
     to: 'viewer@example.com',
     displayName: 'Viewer',
     partyTitle: 'Movie night',
     scheduledStartAt: futureIso(60),
     roomUrl: 'http://localhost:3000/room/abc123',
   });
+
+  assert.deepEqual(result, { delivered: false, provider: 'dev-log' });
 });
 
 function futureIso(minutesFromNow: number): string {

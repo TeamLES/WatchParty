@@ -40,7 +40,7 @@ export class ScheduledPartyReminderWorker
       'false';
 
     if (!enabled) {
-      this.logger.log('scheduled reminder polling disabled');
+      this.logger.log('scheduled reminder worker started enabled=false');
       return;
     }
 
@@ -55,7 +55,7 @@ export class ScheduledPartyReminderWorker
     this.timer = setInterval(() => void this.runOnce(), intervalMs);
     void this.runOnce();
     this.logger.log(
-      `scheduled reminder polling enabled intervalMs=${intervalMs}`,
+      `scheduled reminder worker started enabled=true intervalMs=${intervalMs}`,
     );
   }
 
@@ -77,6 +77,7 @@ export class ScheduledPartyReminderWorker
       const nowIso = new Date().toISOString();
       const dueRooms =
         await this.roomsRepository.listDueScheduledReminderRooms(nowIso);
+      this.logger.log(`scheduled reminder dueRooms=${dueRooms.length}`);
 
       for (const room of dueRooms) {
         await this.processRoom(room);
@@ -87,6 +88,7 @@ export class ScheduledPartyReminderWorker
   }
 
   private async processRoom(room: Room): Promise<void> {
+    this.logger.log(`processing scheduled reminder roomId=${room.roomId}`);
     const now = new Date();
     const nowIso = now.toISOString();
     const staleBeforeIso = new Date(
@@ -119,6 +121,9 @@ export class ScheduledPartyReminderWorker
       const host = members.find(
         (member) => member.userId === claimedRoom.hostUserId,
       );
+      this.logger.log(
+        `scheduled reminder roomId=${claimedRoom.roomId} goingMembers=${goingMembers.length}`,
+      );
 
       const results = await Promise.all(
         goingMembers.map((member) =>
@@ -127,15 +132,34 @@ export class ScheduledPartyReminderWorker
       );
 
       const hasFailures = results.some((status) => status === 'failed');
+      const hasSkipped = results.some((status) => status === 'skipped');
       const failedCount = results.filter(
         (status) => status === 'failed',
       ).length;
+      const skippedCount = results.filter(
+        (status) => status === 'skipped',
+      ).length;
+      const sentCount = results.filter((status) => status === 'sent').length;
 
-      if (hasFailures) {
+      this.logger.log(
+        [
+          `scheduled reminder summary roomId=${claimedRoom.roomId}`,
+          `sent=${sentCount}`,
+          `skipped=${skippedCount}`,
+          `failed=${failedCount}`,
+        ].join(' '),
+      );
+
+      if (hasFailures || hasSkipped) {
         await this.roomsRepository.updateRoom({
           ...claimedRoom,
           reminderStatus: 'failed',
-          reminderError: `${failedCount} member email(s) failed`,
+          reminderError: [
+            failedCount ? `${failedCount} member email(s) failed` : null,
+            skippedCount ? `${skippedCount} member email(s) skipped` : null,
+          ]
+            .filter(Boolean)
+            .join('; '),
         });
       } else {
         await this.roomsRepository.updateRoom({
@@ -161,10 +185,16 @@ export class ScheduledPartyReminderWorker
     host?: RoomMember,
   ): Promise<'sent' | 'skipped' | 'failed'> {
     if (member.reminderEmailSentAt || member.reminderEmailStatus === 'sent') {
-      return 'skipped';
+      this.logger.log(
+        `skipping scheduled reminder roomId=${room.roomId} userId=${member.userId} email=${member.email ?? '(missing)'} reason=already-sent`,
+      );
+      return 'sent';
     }
 
     if (!member.email) {
+      this.logger.warn(
+        `skipping scheduled reminder roomId=${room.roomId} userId=${member.userId} email=(missing) reason=missing-email`,
+      );
       await this.roomsRepository.updateMember({
         ...member,
         reminderEmailStatus: 'failed',
@@ -185,7 +215,15 @@ export class ScheduledPartyReminderWorker
       });
 
       if (result.provider === 'dev-log' && !result.delivered) {
-        // Did not actually send an email (dev mode fallback)
+        this.logger.warn(
+          `skipping scheduled reminder roomId=${room.roomId} userId=${member.userId} email=${member.email} reason=dev-log-provider`,
+        );
+        await this.roomsRepository.updateMember({
+          ...member,
+          reminderEmailStatus: 'skipped',
+          reminderEmailError:
+            'Email was not sent because SES_FROM_EMAIL is not configured and provider=dev-log',
+        });
         return 'skipped';
       }
 
@@ -194,10 +232,17 @@ export class ScheduledPartyReminderWorker
         reminderEmailSentAt: new Date().toISOString(),
         reminderEmailStatus: 'sent',
         reminderEmailError: undefined,
+        ...(result.messageId
+          ? { reminderEmailMessageId: result.messageId }
+          : {}),
       });
       return 'sent';
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `scheduled reminder failed roomId=${room.roomId} userId=${member.userId} to=${member.email}: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       await this.roomsRepository.updateMember({
         ...member,
         reminderEmailStatus: 'failed',

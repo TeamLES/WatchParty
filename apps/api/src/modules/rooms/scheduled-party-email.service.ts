@@ -17,6 +17,7 @@ export class ScheduledPartyEmailService {
   private readonly sesClient: SESClient;
   private readonly fromEmail: string | null;
   private readonly isProduction: boolean;
+  private readonly region: string;
 
   constructor(private readonly configService: ConfigService) {
     const region =
@@ -27,6 +28,7 @@ export class ScheduledPartyEmailService {
       this.configService.get<string>('SES_FROM_EMAIL')?.trim() || null;
     this.isProduction =
       this.configService.get<string>('NODE_ENV') === 'production';
+    this.region = region;
     this.sesClient = new SESClient({ region });
 
     this.logger.log(
@@ -79,14 +81,25 @@ export class ScheduledPartyEmailService {
         throw new Error('SES_FROM_EMAIL is required in production');
       }
 
-      this.logger.log(
-        `[dev-log] Dev email reminder to=${params.to} subject="${subject}" roomUrl=${params.roomUrl}`,
+      this.logger.warn(
+        [
+          'SES not called: SES_FROM_EMAIL missing; dev fallback only',
+          `to=${params.to}`,
+          `subject="${subject}"`,
+          `roomUrl=${params.roomUrl}`,
+        ].join(' '),
       );
       return { delivered: false, provider: 'dev-log' };
     }
 
     this.logger.log(
-      `Sending SES reminder to=${params.to} subject="${subject}" source=${this.fromEmail}`,
+      [
+        'Sending scheduled reminder via SES',
+        `from=${this.fromEmail}`,
+        `to=${params.to}`,
+        `region=${this.region}`,
+        `subject="${subject}"`,
+      ].join(' '),
     );
 
     try {
@@ -116,7 +129,7 @@ export class ScheduledPartyEmailService {
       );
 
       this.logger.log(
-        `SES reminder sent to=${params.to} messageId=${response.MessageId}`,
+        `SES accepted scheduled reminder MessageId=${response.MessageId ?? '(missing)'} to=${params.to}`,
       );
       return {
         delivered: true,
@@ -124,20 +137,57 @@ export class ScheduledPartyEmailService {
         messageId: response.MessageId,
       };
     } catch (error) {
-      const errorName = error instanceof Error ? error.name : 'UnknownError';
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const awsRequestId = (
-        (error as Record<string, unknown>)?.$metadata as Record<string, unknown>
-      )?.requestId as string | undefined;
+      const details = getAwsErrorDetails(error);
 
       this.logger.error(
-        `Failed to send SES reminder to=${params.to}: [${errorName}] ${errorMessage} (RequestId: ${awsRequestId || 'N/A'})`,
+        [
+          `Failed to send scheduled reminder via SES to=${params.to}`,
+          `error.name=${details.name}`,
+          `error.message="${details.message}"`,
+          `error.$metadata.httpStatusCode=${details.httpStatusCode ?? '(none)'}`,
+          `error.$metadata.requestId=${details.requestId ?? '(none)'}`,
+          `error.Code=${details.code ?? '(none)'}`,
+        ].join(' '),
         error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
   }
+}
+
+function getAwsErrorDetails(error: unknown): {
+  name: string;
+  message: string;
+  httpStatusCode?: number;
+  requestId?: string;
+  code?: string;
+} {
+  const record =
+    typeof error === 'object' && error !== null
+      ? (error as Record<string, unknown>)
+      : {};
+  const metadata =
+    typeof record.$metadata === 'object' && record.$metadata !== null
+      ? (record.$metadata as Record<string, unknown>)
+      : {};
+  const code =
+    typeof record.Code === 'string'
+      ? record.Code
+      : typeof record.code === 'string'
+        ? record.code
+        : undefined;
+
+  return {
+    name: error instanceof Error ? error.name : 'UnknownError',
+    message: error instanceof Error ? error.message : String(error),
+    ...(typeof metadata.httpStatusCode === 'number'
+      ? { httpStatusCode: metadata.httpStatusCode }
+      : {}),
+    ...(typeof metadata.requestId === 'string'
+      ? { requestId: metadata.requestId }
+      : {}),
+    ...(code ? { code } : {}),
+  };
 }
 
 function escapeHtml(value: string): string {

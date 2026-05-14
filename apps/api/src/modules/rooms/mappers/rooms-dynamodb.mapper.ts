@@ -43,8 +43,9 @@ export interface RoomMemberItem {
   rsvpStatus?: 'going' | 'not_going' | 'maybe' | 'none';
   rsvpUpdatedAt?: string;
   reminderEmailSentAt?: string;
-  reminderEmailStatus?: 'sent' | 'failed';
+  reminderEmailStatus?: 'sent' | 'skipped' | 'failed';
   reminderEmailError?: string;
+  reminderEmailMessageId?: string;
 }
 
 export interface RoomInviteItem {
@@ -128,6 +129,9 @@ export function toRoomMemberItem(member: RoomMember): RoomMemberItem {
       : {}),
     ...(member.reminderEmailError
       ? { reminderEmailError: member.reminderEmailError }
+      : {}),
+    ...(member.reminderEmailMessageId
+      ? { reminderEmailMessageId: member.reminderEmailMessageId }
       : {}),
   };
 }
@@ -246,6 +250,9 @@ export function fromRoomMemberItem(
   const reminderEmailSentAt = readNullableString(item.reminderEmailSentAt);
   const reminderEmailStatusRaw = readNullableString(item.reminderEmailStatus);
   const reminderEmailError = readNullableString(item.reminderEmailError);
+  const reminderEmailMessageId = readNullableString(
+    item.reminderEmailMessageId,
+  );
 
   if (!roomId || !userId || !joinedAt) {
     return null;
@@ -262,7 +269,9 @@ export function fromRoomMemberItem(
       ? rsvpStatusRaw
       : undefined;
   const reminderEmailStatus =
-    reminderEmailStatusRaw === 'sent' || reminderEmailStatusRaw === 'failed'
+    reminderEmailStatusRaw === 'sent' ||
+    reminderEmailStatusRaw === 'skipped' ||
+    reminderEmailStatusRaw === 'failed'
       ? reminderEmailStatusRaw
       : undefined;
 
@@ -279,6 +288,7 @@ export function fromRoomMemberItem(
     ...(reminderEmailSentAt ? { reminderEmailSentAt } : {}),
     ...(reminderEmailStatus ? { reminderEmailStatus } : {}),
     ...(reminderEmailError ? { reminderEmailError } : {}),
+    ...(reminderEmailMessageId ? { reminderEmailMessageId } : {}),
   };
 }
 

@@ -117,6 +117,34 @@ function formatAttendanceStatus(
   }
 }
 
+async function readApiErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const body = (await response.json()) as {
+      message?: unknown;
+      error?: unknown;
+    };
+
+    if (typeof body.message === "string" && body.message.trim()) {
+      return body.message;
+    }
+
+    if (Array.isArray(body.message) && body.message.length > 0) {
+      return body.message.join("; ");
+    }
+
+    if (typeof body.error === "string" && body.error.trim()) {
+      return body.error;
+    }
+  } catch {
+    // Keep the UI on the known fallback when the upstream response is not JSON.
+  }
+
+  return fallback;
+}
+
 export default function RoomPage({
   params,
 }: {
@@ -397,7 +425,9 @@ export default function RoomPage({
     }
 
     const checkTime = () => {
-      setIsPastScheduledTime(new Date(room.scheduledStartAt!).getTime() <= Date.now());
+      setIsPastScheduledTime(
+        new Date(room.scheduledStartAt!).getTime() <= Date.now(),
+      );
     };
 
     checkTime();
@@ -568,7 +598,8 @@ export default function RoomPage({
 
       if (!res.ok) {
         let details = "";
-        let message = "Could not start the video. Check the link and try again.";
+        let message =
+          "Could not start the video. Check the link and try again.";
 
         try {
           const errorBody = JSON.parse(responseText) as { message?: unknown };
@@ -588,7 +619,8 @@ export default function RoomPage({
         } else if (details.toLowerCase().includes("url")) {
           message = "Paste a valid YouTube URL and try again.";
         } else if (res.status >= 500) {
-          message = "Video could not be started because the server is unavailable.";
+          message =
+            "Video could not be started because the server is unavailable.";
         }
 
         console.error("Failed to update room video", res.status, responseText);
@@ -633,15 +665,10 @@ export default function RoomPage({
       });
 
       if (!res.ok) {
-        let errorMessage = "Could not update attendance";
-        try {
-          const body = await res.json();
-          if (body.message) {
-            errorMessage = body.message;
-          }
-        } catch (e) {
-          // fallback to generic
-        }
+        const errorMessage = await readApiErrorMessage(
+          res,
+          `Could not update attendance (${res.status})`,
+        );
         console.error("Failed to update attendance", res.status);
         toast.error(errorMessage);
         return;
@@ -651,28 +678,28 @@ export default function RoomPage({
       setRoom((prev) =>
         prev
           ? {
-            ...prev,
+              ...prev,
+              members: [
+                ...prev.members.filter(
+                  (member) => member.userId !== data.member.userId,
+                ),
+                data.member,
+              ],
+              isMember: true,
+            }
+          : prev,
+      );
+      roomRef.current = roomRef.current
+        ? {
+            ...roomRef.current,
             members: [
-              ...prev.members.filter(
+              ...roomRef.current.members.filter(
                 (member) => member.userId !== data.member.userId,
               ),
               data.member,
             ],
             isMember: true,
           }
-          : prev,
-      );
-      roomRef.current = roomRef.current
-        ? {
-          ...roomRef.current,
-          members: [
-            ...roomRef.current.members.filter(
-              (member) => member.userId !== data.member.userId,
-            ),
-            data.member,
-          ],
-          isMember: true,
-        }
         : roomRef.current;
       await fetchAttendees();
       toast.success("Attendance updated");
@@ -1319,33 +1346,29 @@ export default function RoomPage({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(["going", "not_going"] as const).map(
-                      (status) => {
-                        const label =
-                          status === "going"
-                            ? "I'm going"
-                            : "Not going";
-                        const active = room.members.some(
-                          (member) =>
-                            member.userId === currentUserId &&
-                            member.rsvpStatus === status,
-                        );
+                    {(["going", "not_going"] as const).map((status) => {
+                      const label =
+                        status === "going" ? "I'm going" : "Not going";
+                      const active = room.members.some(
+                        (member) =>
+                          member.userId === currentUserId &&
+                          member.rsvpStatus === status,
+                      );
 
-                        return (
-                          <Button
-                            key={status}
-                            type="button"
-                            size="sm"
-                            variant={active ? "default" : "secondary"}
-                            className="rounded-xl"
-                            disabled={isUpdatingRsvp}
-                            onClick={() => void handleRsvp(status)}
-                          >
-                            {label}
-                          </Button>
-                        );
-                      },
-                    )}
+                      return (
+                        <Button
+                          key={status}
+                          type="button"
+                          size="sm"
+                          variant={active ? "default" : "secondary"}
+                          className="rounded-xl"
+                          disabled={isUpdatingRsvp}
+                          onClick={() => void handleRsvp(status)}
+                        >
+                          {label}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1524,17 +1547,20 @@ export default function RoomPage({
                       >
                         <RefreshCwIcon className="size-3.5" />
                       </Button>
-                      <div className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isAttendeesOpen ? "rotate-180" : ""}`}>
+                      <div
+                        className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isAttendeesOpen ? "rotate-180" : ""}`}
+                      >
                         <ChevronDownIcon className="size-5" />
                       </div>
                     </div>
                   </div>
 
                   <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${isAttendeesOpen
-                      ? "grid-rows-[1fr] opacity-100"
-                      : "grid-rows-[0fr] opacity-0"
-                      }`}
+                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+                      isAttendeesOpen
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                    }`}
                   >
                     <div className="overflow-hidden">
                       <div className="space-y-2 p-4">
@@ -1552,7 +1578,9 @@ export default function RoomPage({
                                 className="rounded-xl border border-border/50 bg-card/70 p-3 text-sm dark:border-white/5 dark:bg-black/20"
                               >
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="font-medium">{displayName}</span>
+                                  <span className="font-medium">
+                                    {displayName}
+                                  </span>
                                   <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                                     {formatAttendanceStatus(member.rsvpStatus)}
                                   </span>
@@ -1573,7 +1601,10 @@ export default function RoomPage({
                                       ? "REMINDER SENT"
                                       : member.reminderEmailStatus === "failed"
                                         ? "REMINDER FAILED"
-                                        : "REMINDER PENDING"}
+                                        : member.reminderEmailStatus ===
+                                            "skipped"
+                                          ? "REMINDER SKIPPED"
+                                          : "REMINDER PENDING"}
                                   </span>
                                 </div>
                               </div>
@@ -1607,14 +1638,18 @@ export default function RoomPage({
                 }
               />
 
-              <div className={`glass-card panel-surface flex min-h-0 flex-col overflow-hidden rounded-3xl shadow-lg transition-all duration-300 ${isChatOpen ? "flex-1" : "shrink-0"}`}>
+              <div
+                className={`glass-card panel-surface flex min-h-0 flex-col overflow-hidden rounded-3xl shadow-lg transition-all duration-300 ${isChatOpen ? "flex-1" : "shrink-0"}`}
+              >
                 <div
                   className="flex shrink-0 items-center justify-between border-b border-border/60 bg-accent/40 p-4 dark:border-white/10 dark:bg-black/10 cursor-pointer group"
                   onClick={() => setIsChatOpen((prev) => !prev)}
                 >
                   <div className="flex items-center gap-2">
                     <MessageSquareTextIcon className="size-5 text-primary" />
-                    <h2 className="font-semibold text-lg text-foreground">Room Chat</h2>
+                    <h2 className="font-semibold text-lg text-foreground">
+                      Room Chat
+                    </h2>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <div className="flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
@@ -1624,20 +1659,28 @@ export default function RoomPage({
                       </span>
                       Live
                     </div>
-                    <div className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isChatOpen ? "rotate-180" : ""}`}>
+                    <div
+                      className={`ml-2 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary ${isChatOpen ? "rotate-180" : ""}`}
+                    >
                       <ChevronDownIcon className="size-5" />
                     </div>
                   </div>
                 </div>
 
                 <div
-                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out flex-1 min-h-0 ${isChatOpen
-                    ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0"
-                    }`}
-                  style={{ display: isChatOpen ? 'flex' : 'grid', flexDirection: 'column' }}
+                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out flex-1 min-h-0 ${
+                    isChatOpen
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0"
+                  }`}
+                  style={{
+                    display: isChatOpen ? "flex" : "grid",
+                    flexDirection: "column",
+                  }}
                 >
-                  <div className={`flex flex-col overflow-hidden flex-1 ${!isChatOpen && 'invisible'}`}>
+                  <div
+                    className={`flex flex-col overflow-hidden flex-1 ${!isChatOpen && "invisible"}`}
+                  >
                     <div
                       ref={chatContainerRef}
                       className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border dark:scrollbar-thumb-white/10"
